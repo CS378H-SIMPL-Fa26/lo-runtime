@@ -17,3 +17,8 @@ compile_commands.json
 # Platform noise
 .DS_Store
 Thumbs.db
+
+# Nix
+/result
+/result-*
+/.direnv/
