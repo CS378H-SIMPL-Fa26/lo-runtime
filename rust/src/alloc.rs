@@ -127,7 +127,10 @@ unsafe fn alloc_raw(size: usize, class: *const ClassDescriptor) -> *mut Object {
         crate::gc::lo_gc_collect();
         let retry = bump_if_fits(size);
         if retry.is_null() {
-            crate::abort::runtime_abort("lo_alloc: out of memory", 137);
+            crate::abort::runtime_abort(
+                "lo_alloc: out of memory",
+                crate::abort::AbortCode::ABORT_OOM as i32,
+            );
         }
         retry
     };

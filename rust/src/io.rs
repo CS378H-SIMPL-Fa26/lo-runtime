@@ -174,7 +174,10 @@ pub extern "C" fn lo_read_int() -> i32 {
         // present means input exists; failure to parse it is a malformed token
         // (exit 110), not EOF.
         if sys::peek_byte().is_none() {
-            crate::abort::runtime_abort("lo_read_int: end of input", 111);
+            crate::abort::runtime_abort(
+                "lo_read_int: end of input",
+                crate::abort::AbortCode::ABORT_READ_INT_EOF as i32,
+            );
         }
         let mut token = String::new();
         if let Some(b) = sys::peek_byte() {
@@ -194,11 +197,17 @@ pub extern "C" fn lo_read_int() -> i32 {
             }
         }
         if !saw_digit {
-            crate::abort::runtime_abort("lo_read_int: malformed token", 110);
+            crate::abort::runtime_abort(
+                "lo_read_int: malformed token",
+                crate::abort::AbortCode::ABORT_READ_INT_MALFORMED as i32,
+            );
         }
         match token.parse::<i32>() {
             Ok(n) => n,
-            Err(_) => crate::abort::runtime_abort("lo_read_int: malformed token", 110),
+            Err(_) => crate::abort::runtime_abort(
+                "lo_read_int: malformed token",
+                crate::abort::AbortCode::ABORT_READ_INT_MALFORMED as i32,
+            ),
         }
     }
     #[cfg(target_arch = "wasm32")]
@@ -225,7 +234,10 @@ pub extern "C" fn lo_read_bool() -> bool {
         match token.as_str() {
             "true" => true,
             "false" => false,
-            _ => crate::abort::runtime_abort("lo_read_bool: invalid token", 112),
+            _ => crate::abort::runtime_abort(
+                "lo_read_bool: invalid token",
+                crate::abort::AbortCode::ABORT_READ_BOOL_MALFORMED as i32,
+            ),
         }
     }
     #[cfg(target_arch = "wasm32")]

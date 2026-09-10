@@ -15,6 +15,22 @@ extern "C" {
     fn host_write_stderr(ptr: *const u8, len: i32);
 }
 
+/// Native exit status for each runtime abort (`runtime-abi.md` §3.8 table).
+/// Variants are the spec identifiers verbatim (`lo-testing/error-codes.md`
+/// § Runtime-abort signals), hence the non-camel-case names.
+#[allow(non_camel_case_types)]
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AbortCode {
+    ABORT_CAST_FAILURE = 101,
+    ABORT_NULL_RECEIVER = 102,
+    ABORT_READ_INT_MALFORMED = 110,
+    ABORT_READ_INT_EOF = 111,
+    ABORT_READ_BOOL_MALFORMED = 112,
+    ABORT_STRING_REPEAT_NEGATIVE = 120,
+    ABORT_OOM = 137,
+}
+
 /// Abort the process with `msg` on stderr and `code` as the exit status (native),
 /// or emit `msg` via the host stderr-write import (§3.7) and `unreachable`-trap
 /// (WASM). Never returns.
@@ -55,6 +71,6 @@ pub unsafe extern "C" fn lo_abort_null_receiver(method_name: *const u8, method_n
     };
     runtime_abort(
         &format!("lo_abort_null_receiver: cannot dispatch {name}"),
-        102,
+        AbortCode::ABORT_NULL_RECEIVER as i32,
     )
 }
