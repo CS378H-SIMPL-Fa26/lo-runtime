@@ -9,11 +9,11 @@ fn main() {
     lo_runtime::lo_runtime_init();
 
     let n = lo_runtime::lo_read_int();
-    lo_runtime::lo_print_int(n);
-    lo_runtime::lo_println();
+    lo_runtime::lo_print_int(n, 0);
+    lo_runtime::lo_println(0);
 
-    lo_runtime::lo_print_int(42);
-    lo_runtime::lo_println();
+    lo_runtime::lo_print_int(42, 0);
+    lo_runtime::lo_println(0);
 
     lo_runtime::lo_runtime_shutdown();
 }

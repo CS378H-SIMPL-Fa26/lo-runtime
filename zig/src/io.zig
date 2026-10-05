@@ -18,10 +18,10 @@ const StringObject = object.StringObject;
 const is_wasm = builtin.cpu.arch.isWasm();
 
 // --- WASM host imports (wired by the harness at instantiation) --------------
-extern "host" fn host_print_int(n: i32) void;
-extern "host" fn host_print_bool(b: i32) void;
-extern "host" fn host_print_bytes(ptr: [*]const u8, len: i32) void;
-extern "host" fn host_println() void;
+extern "host" fn host_print_int(n: i32, to_stderr: i32) void;
+extern "host" fn host_print_bool(b: i32, to_stderr: i32) void;
+extern "host" fn host_print_bytes(ptr: [*]const u8, len: i32, to_stderr: i32) void;
+extern "host" fn host_println(to_stderr: i32) void;
 extern "host" fn host_read_int() i32;
 extern "host" fn host_read_bool() i32;
 extern "host" fn host_read_line_len() i32;
@@ -68,48 +68,68 @@ fn writeOut(bytes: []const u8) void {
     std.io.getStdOut().writeAll(bytes) catch {};
 }
 
+/// The `to_stderr == 1` half of the print family's destination selector
+/// (`runtime-abi.md` §3.7). Same discipline as `writeOut` — an unbuffered
+/// `writeAll` straight at the fd, so interleaved `out`/`err` output lands on
+/// each stream in issue order.
+fn writeErr(bytes: []const u8) void {
+    std.io.getStdErr().writeAll(bytes) catch {};
+}
+
+/// Route `bytes` to the stream the print family's selector names: `0` stdout,
+/// `1` stderr. Other values are reserved (`runtime-abi.md` §3.7); codegen never
+/// emits them, and they fall back to stdout here.
+fn writeSel(bytes: []const u8, to_stderr: i32) void {
+    if (to_stderr == 1) writeErr(bytes) else writeOut(bytes);
+}
+
 // --- Print set --------------------------------------------------------------
 
-/// Print an `i32` in decimal (no trailing newline).
-pub export fn lo_print_int(n: i32) void {
+/// Print an `i32` in decimal (no trailing newline) to the stream `to_stderr`
+/// selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7).
+pub export fn lo_print_int(n: i32, to_stderr: i32) void {
     if (comptime is_wasm) {
-        host_print_int(n);
+        host_print_int(n, to_stderr);
     } else {
         var buf: [16]u8 = undefined;
         const s = std.fmt.bufPrint(&buf, "{d}", .{n}) catch unreachable;
-        writeOut(s);
+        writeSel(s, to_stderr);
     }
 }
 
-/// Print `true` or `false` (no trailing newline).
-pub export fn lo_print_bool(b: bool) void {
+/// Print `true` or `false` (no trailing newline) to the stream `to_stderr`
+/// selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7).
+pub export fn lo_print_bool(b: bool, to_stderr: i32) void {
     if (comptime is_wasm) {
-        host_print_bool(if (b) 1 else 0);
+        host_print_bool(if (b) 1 else 0, to_stderr);
     } else {
-        writeOut(if (b) "true" else "false");
+        writeSel(if (b) "true" else "false", to_stderr);
     }
 }
 
-/// Print a `StringObject`'s UTF-8 bytes (no trailing newline). Null prints
-/// nothing.
-pub export fn lo_print_string(s: ?*Object) void {
+/// Print a `StringObject`'s UTF-8 bytes (no trailing newline) to the stream
+/// `to_stderr` selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7). Null
+/// prints nothing.
+pub export fn lo_print_string(s: ?*Object, to_stderr: i32) void {
     const obj_ptr = s orelse return;
     const so: *const StringObject = @ptrCast(@alignCast(obj_ptr));
     const len = so.length;
     const data: [*]const u8 = @ptrFromInt(@intFromPtr(obj_ptr) + object.stringDataOffset());
     if (comptime is_wasm) {
-        host_print_bytes(data, @intCast(len));
+        host_print_bytes(data, @intCast(len), to_stderr);
     } else {
-        writeOut(data[0..len]);
+        writeSel(data[0..len], to_stderr);
     }
 }
 
-/// Print a single newline.
-pub export fn lo_println() void {
+/// Print a single newline to the stream `to_stderr` selects: `0` stdout, `1`
+/// stderr (`runtime-abi.md` §3.7). The selector is this entry point's only
+/// argument — it is otherwise nullary.
+pub export fn lo_println(to_stderr: i32) void {
     if (comptime is_wasm) {
-        host_println();
+        host_println(to_stderr);
     } else {
-        writeOut("\n");
+        writeSel("\n", to_stderr);
     }
 }
 

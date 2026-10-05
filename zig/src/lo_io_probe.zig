@@ -9,11 +9,11 @@ pub fn main() void {
     rt.init.lo_runtime_init();
 
     const n = rt.io.lo_read_int();
-    rt.io.lo_print_int(n);
-    rt.io.lo_println();
+    rt.io.lo_print_int(n, 0);
+    rt.io.lo_println(0);
 
-    rt.io.lo_print_int(42);
-    rt.io.lo_println();
+    rt.io.lo_print_int(42, 0);
+    rt.io.lo_println(0);
 
     rt.init.lo_runtime_shutdown();
 }

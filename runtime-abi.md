@@ -15,7 +15,7 @@ The instructor provides three reference skeletons — one each in Rust, Zig, and
 - Pointer sizes follow the target: 64 bits on `x86_64-linux`; 32 bits on `wasm32-unknown-unknown`. Struct sizes given below assume 64-bit pointers. WASM teams adjust pointer-sized fields accordingly. The course targets x86-64 only; see `architecture-reference.md`.
 - Integer types follow C99 conventions: `u32`, `i32`, `u64`, `i64`.
 - The runtime is single-threaded; concurrency is out of scope unless a team's LO-5 brings it in.
-- Every runtime entry point is a *safepoint*: it may trigger GC. Codegen must ensure all live pointer roots are reflected on the shadow stack before any runtime call.
+- Every runtime entry point is a *safepoint*: it may trigger GC. Codegen must ensure all live pointer-typed values (locals, formals and temporaries alike) are reflected on the shadow stack before any runtime call, and that dead root slots hold null (§3.3).
 
 ---
 
@@ -141,7 +141,7 @@ Codegen pattern at function exit (immediately before return):
 lo_pop_frame();
 ```
 
-At each safepoint (just before any call that may trigger GC — which includes all `lo_*` calls), codegen updates `frame.roots[i]` for each live pointer-typed local. The runtime maintains a single `current_frame` pointer (LO is single-threaded, so one suffices); `lo_push_frame` swaps it with the new frame's parent slot, and `lo_pop_frame` restores.
+At each safepoint (just before any call that may trigger GC — which includes all `lo_*` calls), codegen ensures that every live pointer-typed *value* (a local, a formal, or a compiler temporary, wherever it is otherwise homed, a callee-saved register included) is in a `frame.roots[i]` slot, and that a root slot whose value is dead holds null rather than a stale address. <!-- delta 2026-09-18 (DC, on the L10 build's root-set computation): was "for each live pointer-typed local". A temporary holding a freshly allocated object across its constructor call is the clearest case the old wording missed; a stale address in a dead root slot would be followed on the next collection and, after a flip, would point at reused memory. --> The runtime maintains a single `current_frame` pointer (LO is single-threaded, so one suffices); `lo_push_frame` swaps it with the new frame's parent slot, and `lo_pop_frame` restores.
 
 ### 3.4 GC operations
 
@@ -196,13 +196,13 @@ extern "C" fn lo_runtime_shutdown()
 The runtime exposes a minimal I/O surface for test programs. The print set:
 
 ```
-extern "C" fn lo_print_int(n: i32)
-extern "C" fn lo_print_bool(b: bool)
-extern "C" fn lo_print_string(s: *mut Object)
-extern "C" fn lo_println()
+extern "C" fn lo_print_int(n: i32, to_stderr: i32)
+extern "C" fn lo_print_bool(b: bool, to_stderr: i32)
+extern "C" fn lo_print_string(s: *mut Object, to_stderr: i32)
+extern "C" fn lo_println(to_stderr: i32)
 ```
 
-And a symmetric read set, plus an EOF probe:
+Every print entry point takes a trailing `to_stderr` destination selector: `0` writes to the process's standard output, `1` to its standard error. All other values are reserved and must not be emitted. The selector is the last argument in every case, including `lo_println`, which is otherwise nullary. Codegen supplies it — it is not a runtime or host concept: the print family is the lowering target of the `Output` preamble class's `print_*` / `println` methods, and codegen computes the selector from the *receiver* of the call, `0` for `out` and `1` for `err` (see the binding note below). The read set is unaffected — reads only ever come from the single `Input` singleton `in`, so there is no destination to select: <!-- delta 2026-09-12 (P1 follow-up, "print-family destination"): the print family gained the `to_stderr` selector. Before this, `lo_print_*` were stdout-only with no destination argument, and `err.print_*(...)` had no ABI-level realization — it lowered identically to `out.print_*(...)` and both landed on stdout, corrupting the stdout comparison of any program that wrote through `err` (surfaced by `test_output_sink_parameter` once the P1 WO-1 sink-dispatch fix let it run). Reopening the print-family signature was DC's call over two rejected alternatives — a codegen-side fd-swap / host `set_print_dest` bracket that kept the four-arg-less signatures but pushed an undocumented destination-selection trick into both back ends, and a parallel `lo_eprint_*` family that avoided the signature change at the cost of a runtime branch at every dynamic-receiver call site. The destination selector was chosen because it keeps "codegen calls one documented entry point" true for both the static (`out`/`err` literal) and dynamic (`Output`-typed field/parameter) cases; the dynamic case passes a value computed at run time from the receiver's identity, with no branch and no bracket. This is a deliberate signature break: a compiler that emitted `call lo_print_int` with a single argument must now pass the selector (`0` for the common stdout case). -->
 
 ```
 extern "C" fn lo_read_int() -> i32
@@ -211,7 +211,7 @@ extern "C" fn lo_read_string() -> *mut Object
 extern "C" fn lo_eof() -> bool
 ```
 
-On native, these wrap libc `printf` / `puts` for output and `scanf` / `fgets` for input. On WASM, they import host functions provided by the test harness — typically `print_int`, `read_int`, etc., resolved at module instantiation; the harness wires the read functions to whatever input source it uses. The host also provides a stderr-write import — `host.write_stderr(ptr: i32, len: i32)`, writing `len` bytes of linear memory at `ptr` to the process's stderr — which the runtime uses to emit abort messages before trapping (§3.8); it is the WASM analog of the native abort path's direct stderr write.
+On native, the print entry points write the formatted bytes directly to the selected stream — `stdout` when `to_stderr == 0`, `stderr` when `to_stderr == 1` — each flushed immediately, and the read entry points wrap libc `scanf` / `fgets` on stdin. On WASM, the entry points forward to host functions provided by the test harness — the print family to `host_print_int` / `host_print_bool` / `host_print_bytes` / `host_println`, each of which takes the same trailing `to_stderr: i32` selector and writes to the harness's stdout or stderr capture accordingly; the read family to `host_read_*`, resolved at module instantiation, wired to whatever input source the harness uses. The host also provides a stderr-write import — `host.write_stderr(ptr: i32, len: i32)`, writing `len` bytes of linear memory at `ptr` to the process's stderr — which the runtime uses to emit abort messages before trapping (§3.8); it is the WASM analog of the native abort path's direct stderr write. (`host.write_stderr` is the runtime's own one-shot, buffered-until-trap abort channel and is unrelated to the print family's `to_stderr` selector, which routes ordinary, immediately-flushed program output.)
 
 Read semantics:
 
@@ -220,7 +220,7 @@ Read semantics:
 - `lo_read_string` reads up to the next newline; the newline is consumed but excluded from the returned `StringObject`. Returns the empty string on immediate end-of-input — use `lo_eof` to disambiguate end-of-input from a blank line.
 - `lo_eof` returns `true` iff stdin is at end-of-input without consuming any bytes. It is a robust loop guard for **line-oriented** input: `while ( ! eof() ) { s = read_string(); … }` terminates cleanly, because `read_string` consumes its trailing newline, so after the last line the stream is at end-of-input. For **token** input (`lo_read_int` / `lo_read_bool`), `eof()` is **not** a robust guard on its own: it consumes no bytes and the token reads skip leading whitespace, so any trailing whitespace (e.g., a final newline) leaves `eof()` reporting not-at-end after the last token — `while ( ! eof() ) { read_int(); }` then reads once more and aborts with exit 111. Token-reading loops should read an explicit count first (read `n`, then read `n` values) or consume input of known exact length.
 
-The I/O surface is the lowering target for the synthetic `Input` and `Output` standard-preamble classes documented in `lo-3-reference.md` §4.6, accessed by user code through the three pre-bound names `in`, `out`, `err`. The preamble classes and pre-bound names are codegen-side recognition patterns, not runtime concepts; the ABI only exposes the entry points and lets codegen do the binding.
+The I/O surface is the lowering target for the synthetic `Input` and `Output` standard-preamble classes documented in `lo-3-reference.md` §4.6, accessed by user code through the three pre-bound names `in`, `out`, `err`. The preamble classes and pre-bound names are codegen-side recognition patterns, not runtime concepts; the ABI only exposes the entry points and lets codegen do the binding. The binding includes the print family's `to_stderr` selector: `out` and `err` are both `Output` singletons distinguished only by which stream they write to, so when a `print_*` / `println` call's receiver is the literal `out` or `err`, codegen passes the constant `0` or `1`; when the receiver is an `Output`-typed variable, field, or formal whose value is not known until run time, codegen passes a value computed at the call site by comparing the receiver against the interned `err` singleton (the non-null preamble-singleton addresses codegen already maintains to keep `in`/`out`/`err` distinguishable from `null`). Either way the runtime and host see only the resulting `0`/`1` — they carry no notion of `Output` identity.
 
 ### 3.8 Dispatch aborts
 

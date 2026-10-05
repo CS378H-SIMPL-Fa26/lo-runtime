@@ -8,11 +8,11 @@ int main() {
   lo_runtime_init();
 
   const std::int32_t n = lo_read_int();
-  lo_print_int(n);
-  lo_println();
+  lo_print_int(n, 0);
+  lo_println(0);
 
-  lo_print_int(42);
-  lo_println();
+  lo_print_int(42, 0);
+  lo_println(0);
 
   lo_runtime_shutdown();
   return 0;

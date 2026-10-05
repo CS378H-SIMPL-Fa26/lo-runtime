@@ -31,6 +31,16 @@ void skip_whitespace() {
   }
 }
 
+// The stream the print family's selector names: 0 = stdout, 1 = stderr. Other
+// values are reserved (runtime-abi.md §3.7); codegen never emits them, and they
+// fall back to stdout here.
+std::FILE *print_stream(std::int32_t to_stderr) { return to_stderr == 1 ? stderr : stdout; }
+
+// Flush right after every print-family write, matching the Rust and Zig
+// skeletons: a program interleaving `out` and `err` must land each byte on its
+// stream as it is issued, not at exit.
+void flush_stream(std::FILE *f) { std::fflush(f); }
+
 } // namespace
 #endif
 
@@ -41,10 +51,10 @@ void skip_whitespace() {
 
 #ifdef __wasm__
 extern "C" {
-void host_print_int(std::int32_t n);
-void host_print_bool(std::int32_t b);
-void host_print_bytes(const std::uint8_t *p, std::int32_t len);
-void host_println();
+void host_print_int(std::int32_t n, std::int32_t to_stderr);
+void host_print_bool(std::int32_t b, std::int32_t to_stderr);
+void host_print_bytes(const std::uint8_t *p, std::int32_t len, std::int32_t to_stderr);
+void host_println(std::int32_t to_stderr);
 std::int32_t host_read_int();
 std::int32_t host_read_bool();
 std::int32_t host_read_line_len();
@@ -53,40 +63,48 @@ std::int32_t host_eof();
 }
 #endif
 
-extern "C" void lo_print_int(std::int32_t n) {
+extern "C" void lo_print_int(std::int32_t n, std::int32_t to_stderr) {
 #ifdef __wasm__
-  host_print_int(n);
+  host_print_int(n, to_stderr);
 #else
-  std::printf("%d", n);
+  std::FILE *f = print_stream(to_stderr);
+  std::fprintf(f, "%d", n);
+  flush_stream(f);
 #endif
 }
 
-extern "C" void lo_print_bool(bool b) {
+extern "C" void lo_print_bool(bool b, std::int32_t to_stderr) {
 #ifdef __wasm__
-  host_print_bool(b ? 1 : 0);
+  host_print_bool(b ? 1 : 0, to_stderr);
 #else
-  std::fputs(b ? "true" : "false", stdout);
+  std::FILE *f = print_stream(to_stderr);
+  std::fputs(b ? "true" : "false", f);
+  flush_stream(f);
 #endif
 }
 
-extern "C" void lo_print_string(Object *s) {
+extern "C" void lo_print_string(Object *s, std::int32_t to_stderr) {
   if (s == nullptr) {
     return;
   }
   auto *so = reinterpret_cast<StringObject *>(s);
   const auto *data = reinterpret_cast<const std::uint8_t *>(s) + lo::string_data_offset();
 #ifdef __wasm__
-  host_print_bytes(data, static_cast<std::int32_t>(so->length));
+  host_print_bytes(data, static_cast<std::int32_t>(so->length), to_stderr);
 #else
-  std::fwrite(data, 1, so->length, stdout);
+  std::FILE *f = print_stream(to_stderr);
+  std::fwrite(data, 1, so->length, f);
+  flush_stream(f);
 #endif
 }
 
-extern "C" void lo_println() {
+extern "C" void lo_println(std::int32_t to_stderr) {
 #ifdef __wasm__
-  host_println();
+  host_println(to_stderr);
 #else
-  std::putchar('\n');
+  std::FILE *f = print_stream(to_stderr);
+  std::fputc('\n', f);
+  flush_stream(f);
 #endif
 }
 

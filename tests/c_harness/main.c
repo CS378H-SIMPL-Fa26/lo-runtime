@@ -51,9 +51,11 @@ _Static_assert(offsetof(StringObject, length) + sizeof(uint32_t) == 20,
 extern void lo_runtime_init(void);
 extern void lo_runtime_shutdown(void);
 extern Object *lo_alloc(const ClassDescriptor *cls);
-extern void lo_print_int(int32_t n);
-extern void lo_print_string(Object *s);
-extern void lo_println(void);
+/* The print family's trailing to_stderr selects the stream: 0 = stdout,
+ * 1 = stderr (runtime-abi.md §3.7). This harness only writes stdout. */
+extern void lo_print_int(int32_t n, int32_t to_stderr);
+extern void lo_print_string(Object *s, int32_t to_stderr);
+extern void lo_println(int32_t to_stderr);
 
 /* Exported statics codegen references by symbol. LO_EMPTY_STRING is a `.rodata`
  * static *object* (runtime-abi.md §2.3): the symbol denotes the object itself,
@@ -81,8 +83,8 @@ int main(void) {
   }
 
   /* Output the canonical line the cross-skeleton check compares: "42\n". */
-  lo_print_int(42);
-  lo_println();
+  lo_print_int(42, 0);
+  lo_println(0);
 
   lo_runtime_shutdown();
   return 0;

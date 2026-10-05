@@ -31,6 +31,27 @@ mod sys {
         let _ = out.flush();
     }
 
+    /// Write all bytes to stderr and flush — the `to_stderr == 1` half of the
+    /// print family's destination selector (`runtime-abi.md` §3.7). Same
+    /// immediate-flush discipline as [`write_out`]: a program interleaving
+    /// `out` and `err` writes must land each byte on its stream in issue order.
+    pub(super) fn write_err(bytes: &[u8]) {
+        let mut err = io::stderr();
+        let _ = err.write_all(bytes);
+        let _ = err.flush();
+    }
+
+    /// Route `bytes` to the stream the print family's selector names: `0`
+    /// stdout, `1` stderr. Other values are reserved (`runtime-abi.md` §3.7);
+    /// codegen never emits them, and they fall back to stdout here.
+    pub(super) fn write_sel(bytes: &[u8], to_stderr: i32) {
+        if to_stderr == 1 {
+            write_err(bytes);
+        } else {
+            write_out(bytes);
+        }
+    }
+
     /// Peek the next input byte without consuming it.
     pub(super) fn peek_byte() -> Option<u8> {
         let stdin = io::stdin();
@@ -74,10 +95,10 @@ mod sys {
 mod sys {
     #[link(wasm_import_module = "host")]
     extern "C" {
-        pub(super) fn host_print_int(n: i32);
-        pub(super) fn host_print_bool(b: i32);
-        pub(super) fn host_print_bytes(ptr: *const u8, len: i32);
-        pub(super) fn host_println();
+        pub(super) fn host_print_int(n: i32, to_stderr: i32);
+        pub(super) fn host_print_bool(b: i32, to_stderr: i32);
+        pub(super) fn host_print_bytes(ptr: *const u8, len: i32, to_stderr: i32);
+        pub(super) fn host_println(to_stderr: i32);
         pub(super) fn host_read_int() -> i32;
         pub(super) fn host_read_bool() -> i32;
         pub(super) fn host_read_line_len() -> i32;
@@ -104,36 +125,39 @@ fn skip_whitespace() {
 // Print set.
 // ---------------------------------------------------------------------------
 
-/// Print an `i32` in decimal (no trailing newline).
+/// Print an `i32` in decimal (no trailing newline) to the stream `to_stderr`
+/// selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7).
 #[no_mangle]
-pub extern "C" fn lo_print_int(n: i32) {
+pub extern "C" fn lo_print_int(n: i32, to_stderr: i32) {
     #[cfg(not(target_arch = "wasm32"))]
-    sys::write_out(n.to_string().as_bytes());
+    sys::write_sel(n.to_string().as_bytes(), to_stderr);
     #[cfg(target_arch = "wasm32")]
     unsafe {
-        sys::host_print_int(n);
+        sys::host_print_int(n, to_stderr);
     }
 }
 
-/// Print `true` or `false` (no trailing newline).
+/// Print `true` or `false` (no trailing newline) to the stream `to_stderr`
+/// selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7).
 #[no_mangle]
-pub extern "C" fn lo_print_bool(b: bool) {
+pub extern "C" fn lo_print_bool(b: bool, to_stderr: i32) {
     #[cfg(not(target_arch = "wasm32"))]
-    sys::write_out(if b { b"true" } else { b"false" });
+    sys::write_sel(if b { b"true" } else { b"false" }, to_stderr);
     #[cfg(target_arch = "wasm32")]
     unsafe {
-        sys::host_print_bool(b as i32);
+        sys::host_print_bool(b as i32, to_stderr);
     }
 }
 
-/// Print a `StringObject`'s UTF-8 bytes (no trailing newline). A null argument
-/// prints nothing.
+/// Print a `StringObject`'s UTF-8 bytes (no trailing newline) to the stream
+/// `to_stderr` selects: `0` stdout, `1` stderr (`runtime-abi.md` §3.7). A null
+/// argument prints nothing.
 ///
 /// # Safety
 /// `s`, if non-null, must point at a valid `StringObject` whose inline data holds
 /// `length` readable bytes.
 #[no_mangle]
-pub unsafe extern "C" fn lo_print_string(s: *mut Object) {
+pub unsafe extern "C" fn lo_print_string(s: *mut Object, to_stderr: i32) {
     if s.is_null() {
         return;
     }
@@ -142,19 +166,21 @@ pub unsafe extern "C" fn lo_print_string(s: *mut Object) {
     let data = (s as *const u8).add(string_data_offset());
     let slice = core::slice::from_raw_parts(data, len);
     #[cfg(not(target_arch = "wasm32"))]
-    sys::write_out(slice);
+    sys::write_sel(slice, to_stderr);
     #[cfg(target_arch = "wasm32")]
-    sys::host_print_bytes(slice.as_ptr(), slice.len() as i32);
+    sys::host_print_bytes(slice.as_ptr(), slice.len() as i32, to_stderr);
 }
 
-/// Print a single newline.
+/// Print a single newline to the stream `to_stderr` selects: `0` stdout, `1`
+/// stderr (`runtime-abi.md` §3.7). The selector is this entry point's only
+/// argument — it is otherwise nullary.
 #[no_mangle]
-pub extern "C" fn lo_println() {
+pub extern "C" fn lo_println(to_stderr: i32) {
     #[cfg(not(target_arch = "wasm32"))]
-    sys::write_out(b"\n");
+    sys::write_sel(b"\n", to_stderr);
     #[cfg(target_arch = "wasm32")]
     unsafe {
-        sys::host_println();
+        sys::host_println(to_stderr);
     }
 }
 

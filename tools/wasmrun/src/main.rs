@@ -194,28 +194,47 @@ fn abort_exit(err: anyhow::Error, emitted: Option<Vec<u8>>) -> i32 {
     code
 }
 
+/// Write a print-family payload to the stream the guest's `to_stderr` selector
+/// names: `0` stdout, `1` stderr (`runtime-abi.md` §3.7). Other values are
+/// reserved — codegen never emits them, and they fall back to stdout here.
+/// Each write is flushed immediately, on either stream, so a program
+/// interleaving `out` and `err` lands its bytes on each stream in issue order
+/// (and so the harness's separate stdout/stderr captures are both complete
+/// even if the guest later traps).
+fn host_write(bytes: &[u8], to_stderr: i32) {
+    if to_stderr == 1 {
+        let mut err = std::io::stderr();
+        let _ = err.write_all(bytes);
+        let _ = err.flush();
+    } else {
+        let mut out = std::io::stdout();
+        let _ = out.write_all(bytes);
+        let _ = out.flush();
+    }
+}
+
 fn wire_host(linker: &mut Linker<Ctx>) {
     linker
-        .func_wrap("host", "host_print_int", |_c: Caller<'_, Ctx>, n: i32| {
-            print!("{n}");
+        .func_wrap("host", "host_print_int", |_c: Caller<'_, Ctx>, n: i32, to_stderr: i32| {
+            host_write(n.to_string().as_bytes(), to_stderr);
         })
         .unwrap();
     linker
-        .func_wrap("host", "host_print_bool", |_c: Caller<'_, Ctx>, b: i32| {
-            print!("{}", if b != 0 { "true" } else { "false" });
+        .func_wrap("host", "host_print_bool", |_c: Caller<'_, Ctx>, b: i32, to_stderr: i32| {
+            host_write(if b != 0 { b"true".as_slice() } else { b"false".as_slice() }, to_stderr);
         })
         .unwrap();
     linker
-        .func_wrap("host", "host_print_bytes", |mut c: Caller<'_, Ctx>, ptr: i32, len: i32| {
+        .func_wrap("host", "host_print_bytes", |mut c: Caller<'_, Ctx>, ptr: i32, len: i32, to_stderr: i32| {
             let m = memory(&mut c);
             let mut buf = vec![0u8; len.max(0) as usize];
             m.read(&c, ptr as usize, &mut buf).unwrap_or(());
-            let _ = std::io::stdout().write_all(&buf);
+            host_write(&buf, to_stderr);
         })
         .unwrap();
     linker
-        .func_wrap("host", "host_println", |_c: Caller<'_, Ctx>| {
-            println!();
+        .func_wrap("host", "host_println", |_c: Caller<'_, Ctx>, to_stderr: i32| {
+            host_write(b"\n", to_stderr);
         })
         .unwrap();
     // §3.7 stderr-write import: the runtime uses it to emit an abort message
