@@ -14,7 +14,7 @@
 //! - [`layout`] — object sizes in granules, layouts, and reference slots.
 //! - [`init`] — runtime lifecycle.
 //! - [`io`] — print / read / EOF.
-//! - [`gc`] — write barrier (provided) + collect (stub).
+//! - [`gc`] — write barrier + the sliding mark-compact collector.
 //! - [`string_ops`], [`cast`] — stubs.
 //! - [`abort`] — runtime abort paths + `lo_abort_null_receiver`.
 //!

@@ -49,7 +49,9 @@ src/
 ├── shadow_stack.rs   # lo_push_frame / lo_pop_frame
 ├── init.rs           # lo_runtime_init / lo_runtime_shutdown
 ├── io.rs             # lo_print_* / lo_read_* / lo_println / lo_eof
-├── gc.rs             # lo_gc_write_barrier (provided) + lo_gc_collect (stub)
+├── gc.rs             # lo_gc_write_barrier + the sliding mark-compact collector
+├── gc/               # the collector's mark bitmap and offset table
+├── layout.rs         # object sizes in granules, layouts, reference slots
 ├── string_ops.rs     # string op stubs
 ├── cast.rs           # cast/instanceof stubs
 ├── abort.rs          # runtime abort paths + lo_abort_null_receiver

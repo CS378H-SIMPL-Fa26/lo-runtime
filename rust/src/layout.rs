@@ -5,6 +5,7 @@
 //! allocator use them so that object sizes and reference locations are computed
 //! in exactly one place.
 
+use core::ops::Add;
 use core::ptr::{self, NonNull};
 
 use crate::descriptors::LO_STRING_CLASS;
@@ -14,11 +15,19 @@ use crate::object::{string_data_offset, Object, StringObject};
 /// of granules, on both targets.
 pub(crate) const GRANULE: usize = 8;
 
+/// Granules per block. A block is one word of the mark bitmap and one entry of
+/// the offset table.
+pub(crate) const BLOCK_GRANULES: u32 = 64;
+
 /// A size measured in granules.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Granules(u32);
 
 impl Granules {
+    pub(crate) const fn new(n: u32) -> Granules {
+        Granules(n)
+    }
+
     /// The fewest granules that hold `bytes` bytes.
     pub(crate) fn from_bytes(bytes: usize) -> Granules {
         let n = bytes.div_ceil(GRANULE);
@@ -27,6 +36,60 @@ impl Granules {
 
     pub(crate) fn bytes(self) -> usize {
         self.0 as usize * GRANULE
+    }
+}
+
+/// A granule's index from the heap base. Every reference into the heap is the
+/// address of exactly one granule, so a `Granule` is a range-checked reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Granule(u32);
+
+impl Granule {
+    pub(crate) const ZERO: Granule = Granule(0);
+
+    pub(crate) const fn new(index: u32) -> Granule {
+        Granule(index)
+    }
+
+    pub(crate) fn index(self) -> u32 {
+        self.0
+    }
+
+    /// Byte offset from the heap base.
+    pub(crate) fn bytes(self) -> usize {
+        self.0 as usize * GRANULE
+    }
+
+    /// The block holding this granule.
+    pub(crate) fn block(self) -> usize {
+        (self.0 / BLOCK_GRANULES) as usize
+    }
+
+    /// This granule's bit within its block's bitmap word.
+    pub(crate) fn bit(self) -> u32 {
+        self.0 % BLOCK_GRANULES
+    }
+
+    /// The number of blocks holding any granule below this one.
+    pub(crate) fn blocks_below(self) -> usize {
+        self.0.div_ceil(BLOCK_GRANULES) as usize
+    }
+
+    /// The first granule of `block`.
+    pub(crate) fn block_start(block: usize) -> Granule {
+        Granule(block as u32 * BLOCK_GRANULES)
+    }
+
+    pub(crate) fn checked_add(self, n: Granules) -> Option<Granule> {
+        self.0.checked_add(n.0).map(Granule)
+    }
+}
+
+impl Add<Granules> for Granule {
+    type Output = Granule;
+
+    fn add(self, n: Granules) -> Granule {
+        Granule(self.0 + n.0)
     }
 }
 
