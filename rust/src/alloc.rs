@@ -24,6 +24,7 @@ use core::alloc::Layout;
 use core::ptr;
 
 use crate::descriptors::LO_STRING_CLASS;
+use crate::layout::Granules;
 use crate::object::{string_data_offset, ClassDescriptor, Object, StringObject};
 
 /// Default total heap size (16 MiB), overridable via `LO_HEAP_SIZE` at init.
@@ -45,11 +46,6 @@ static mut FREE: *mut u8 = ptr::null_mut();
 /// here and then [`flip`]s the roles.
 static mut TO_BASE: *mut u8 = ptr::null_mut();
 static mut TO_LIMIT: *mut u8 = ptr::null_mut();
-
-#[inline]
-const fn align_up(n: usize, align: usize) -> usize {
-    (n + align - 1) & !(align - 1)
-}
 
 #[inline]
 const fn align_down(n: usize, align: usize) -> usize {
@@ -111,14 +107,15 @@ pub(crate) fn heap_shutdown() {
     }
 }
 
-/// Carve `size` zero-initialized bytes from the active semispace and stamp the
+/// Carve `size` zero-initialized granules from the active semispace and stamp the
 /// object header. On a no-fit, forces one collection and retries; aborts (exit
 /// 137) only if the live set still leaves no room (runbook WS-2 §2.1, ABI §3.1).
 ///
 /// # Safety
 /// `class` must point at a valid, live `ClassDescriptor`. `size` must be at least
-/// `size_of::<Object>()` so the header fits, and a multiple of 8.
-unsafe fn alloc_raw(size: usize, class: *const ClassDescriptor) -> *mut Object {
+/// `size_of::<Object>()` so the header fits.
+unsafe fn alloc_raw(size: Granules, class: *const ClassDescriptor) -> *mut Object {
+    let size = size.bytes();
     let bump = bump_if_fits(size);
     let slot = if !bump.is_null() {
         bump
@@ -174,8 +171,7 @@ unsafe fn bump_if_fits(size: usize) -> *mut u8 {
 /// least `size_of::<Object>()`.
 #[no_mangle]
 pub unsafe extern "C" fn lo_alloc(class: *const ClassDescriptor) -> *mut Object {
-    let size = align_up((*class).instance_size as usize, 8);
-    alloc_raw(size, class)
+    alloc_raw(Granules::from_bytes((*class).instance_size as usize), class)
 }
 
 /// Allocate a `StringObject` with room for `len` inline bytes, header stamped to
@@ -190,7 +186,7 @@ pub unsafe extern "C" fn lo_alloc(class: *const ClassDescriptor) -> *mut Object 
 /// Must be called after `heap_init`. Returns a valid `*mut Object`/`*mut
 /// StringObject` or aborts on OOM.
 pub(crate) unsafe fn bump_alloc_string(len: u32) -> *mut Object {
-    let size = align_up(string_data_offset() + len as usize, 8);
+    let size = Granules::from_bytes(string_data_offset() + len as usize);
     let obj = alloc_raw(size, &LO_STRING_CLASS);
     let so = obj as *mut StringObject;
     (*so).length = len;

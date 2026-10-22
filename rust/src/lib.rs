@@ -11,6 +11,7 @@
 //! - [`descriptors`] — built-in class descriptors + the `LO_EMPTY_STRING` singleton.
 //! - [`alloc`] — bump allocator behind `lo_alloc`.
 //! - [`shadow_stack`] — root-tracking frame list.
+//! - [`layout`] — object sizes in granules, layouts, and reference slots.
 //! - [`init`] — runtime lifecycle.
 //! - [`io`] — print / read / EOF.
 //! - [`gc`] — write barrier (provided) + collect (stub).
@@ -27,6 +28,7 @@ mod descriptors;
 mod gc;
 mod init;
 mod io;
+mod layout;
 mod object;
 mod shadow_stack;
 mod string_ops;

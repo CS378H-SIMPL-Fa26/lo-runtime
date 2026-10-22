@@ -16,10 +16,9 @@
 //! run on one heap — so it needs no ABI pin. All three skeletons (Rust / Zig /
 //! C++) use this same bit so cross-skeleton header encoding stays byte-identical.
 
-use crate::descriptors::LO_STRING_CLASS;
-use crate::object::{
-    shadow_frame_roots_offset, string_data_offset, ClassDescriptor, Object, StringObject,
-};
+use crate::layout::layout;
+use crate::object::{ClassDescriptor, Object};
+use crate::shadow_stack::roots;
 
 /// Forwarding-flag bit in `gc_bits` (decision (C)). See module docs.
 pub(crate) const GC_FORWARDED_BIT: u32 = 0b1;
@@ -54,29 +53,6 @@ pub extern "C" fn lo_gc_collect() {
     unsafe { collect() }
 }
 
-#[inline]
-const fn align8(n: usize) -> usize {
-    (n + 7) & !7
-}
-
-/// True byte size of a heap object — the count `forward` copies and the stride
-/// `scan` advances by (runbook WS-2 §2.2). Strings are variable-size: their inline
-/// UTF-8 tail starts at `offset_of(StringObject, data)` (= 20 on 64-bit), **not**
-/// `size_of` — the offset-of-not-size-of rule (`runtime-abi.md` §2.2).
-///
-/// # Safety
-/// `p` must point at a valid object whose `class_descriptor` is intact (a live
-/// from-space object before its tombstone is installed, or a to-space copy).
-unsafe fn object_size(p: *mut Object) -> usize {
-    let class = (*p).class_descriptor;
-    if core::ptr::eq(class, &LO_STRING_CLASS) {
-        let so = p as *const StringObject;
-        align8(string_data_offset() + (*so).length as usize)
-    } else {
-        align8((*class).instance_size as usize)
-    }
-}
-
 /// Evacuate `p` from the from-space `[from_base, from_limit)` into the to-space,
 /// bumping `free` (runbook WS-2 §2.3). Returns `p`'s new address. Null and
 /// non-from-space (immortal / `.rodata`, e.g. `LO_EMPTY_STRING`) pointers are
@@ -109,7 +85,7 @@ unsafe fn forward(
         // Already moved; the class_descriptor slot holds the new address.
         return (*p).class_descriptor as *mut Object;
     }
-    let n = object_size(p);
+    let n = layout(p).size.bytes();
     let dst = *free;
     core::ptr::copy_nonoverlapping(addr, dst, n);
     // Install the tombstone in the *original* — after the copy, so the to-space
@@ -132,35 +108,21 @@ unsafe fn collect() {
     let mut free = to_base;
     let mut scan = to_base;
 
-    // 1–2. Scan the root set: every slot of every shadow-stack frame, walking
-    // `current_frame` -> `parent` to null (ABI §3.3). The shadow stack is the
-    // complete root set.
-    let mut frame = crate::shadow_stack::current_frame();
-    while !frame.is_null() {
-        let num = (*frame).num_roots as usize;
-        let roots_base = (frame as *mut u8).add(shadow_frame_roots_offset());
-        for i in 0..num {
-            let slot = roots_base.add(i * core::mem::size_of::<*mut Object>()) as *mut *mut Object;
-            *slot = forward(*slot, from_base, from_limit, &mut free);
-        }
-        frame = (*frame).parent;
+    // 1–2. Scan the root set.
+    for slot in roots() {
+        slot.set(forward(slot.get(), from_base, from_limit, &mut free));
     }
 
     // 3. Cheney loop: scan copied objects in to-space, forwarding each pointer
-    // field, until `scan` catches `free`. Strings have `pointer_count == 0`, so
-    // they only advance `scan` — but `object_size` still uses the variable-size
-    // branch to advance correctly.
+    // field, until `scan` catches `free`. Strings have no pointer fields, so they
+    // only advance `scan`, by their variable size.
     while scan < free {
         let obj = scan as *mut Object;
-        let class = (*obj).class_descriptor;
-        let count = (*class).pointer_count as usize;
-        let offsets = (*class).pointer_offsets;
-        for i in 0..count {
-            let off = *offsets.add(i) as usize;
-            let slot = (obj as *mut u8).add(off) as *mut *mut Object;
-            *slot = forward(*slot, from_base, from_limit, &mut free);
+        let layout = layout(obj);
+        for slot in layout.pointer_slots(obj) {
+            slot.set(forward(slot.get(), from_base, from_limit, &mut free));
         }
-        scan = scan.add(object_size(obj));
+        scan = scan.add(layout.size.bytes());
     }
 
     // 4. Commit: swap the semispace roles; the old from-space is now free.
