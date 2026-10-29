@@ -23,6 +23,8 @@ gc-verify = []
 # Deterministic 4 KiB default on WASM (which has no environment variables).
 # Native LO_HEAP_SIZE can still override it. Testing only, never a release default.
 gc-stress = ["gc-verify"]
+# Collect before every managed allocation, including string allocations.
+gc-every-alloc = ["gc-stress"]
 
 [profile.release]
 lto = "thin"

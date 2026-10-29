@@ -6,8 +6,46 @@ crate=$(cd "$(dirname "$0")/../.." && pwd)
 build=$(mktemp -d)
 trap 'rm -rf "$build"' EXIT
 export CARGO_TARGET_DIR="$build/target"
-cargo build --manifest-path "$crate/Cargo.toml" --release --lib --features gc-stress
-cargo build --manifest-path "$crate/Cargo.toml" --release --lib --features gc-stress --target wasm32-unknown-unknown
+# MODES=native permits local testing without the WASM tools.
+# SEEDS controls deterministic random runs; failures print their reproducer.
+read -r -a modes <<< "${MODES:-native wasm}"
+read -r -a seeds <<< "${SEEDS:-1 7 42 12345 3735928559}"
+export LO_HEAP_SIZE=4096
+build_runtime() {
+  for mode in "${modes[@]}"; do
+    if [[ $mode == native ]]; then
+      cargo build --manifest-path "$crate/Cargo.toml" --release --lib --features "$1"
+    elif [[ $mode == wasm ]]; then
+      cargo build --manifest-path "$crate/Cargo.toml" --release --lib --features "$1" --target wasm32-unknown-unknown
+    else
+      echo "Unknown mode: $mode" >&2; exit 2
+    fi
+  done
+}
+compile_probe() {
+  local source=$1 define=$2
+  if [[ $mode == native ]]; then
+    "${CC:-cc}" -std=c11 -O2 "$define" "$crate/tests/gc/$source" \
+      "$build/target/release/liblo_runtime.a" -lpthread -ldl -lm -o "$build/probe"
+    command=("$build/probe")
+  else
+    "${WASM_CC:-clang}" --target=wasm32-unknown-unknown -std=c11 -O2 "$define" \
+      -c "$crate/tests/gc/$source" -o "$build/probe.o"
+    "${WASM_LD:-wasm-ld}" --no-entry --export=lo_entry --allow-undefined "$build/probe.o" \
+      "$build/target/wasm32-unknown-unknown/release/liblo_runtime.a" -o "$build/probe.wasm"
+    command=("${WASMRUN:-wasmrun}" "$build/probe.wasm")
+  fi
+}
+positive() {
+  local status=0
+  "${command[@]}" >"$build/out" 2>"$build/err" || status=$?
+  if [[ $status != 0 ]]; then
+    cat "$build/out" "$build/err"
+    echo "$mode $1 failed: status $status (C assertion line modulo 256)" >&2; exit 1
+  fi
+  echo "$mode $1 passed"
+}
+build_runtime gc-stress
 expected=(
   ''
   'unknown descriptor'
@@ -19,19 +57,9 @@ expected=(
   'reference into free heap'
   'unexpected GC header bits'
 )
-for mode in native wasm; do
+for mode in "${modes[@]}"; do
   for case_id in {0..9}; do
-    if [[ $mode == native ]]; then
-      cc -std=c11 -O2 -DCASE="$case_id" "$crate/tests/gc/probe.c" \
-        "$build/target/release/liblo_runtime.a" -lpthread -ldl -lm -o "$build/probe"
-      command=("$build/probe")
-    else
-      clang --target=wasm32-unknown-unknown -std=c11 -O2 -DCASE="$case_id" \
-        -c "$crate/tests/gc/probe.c" -o "$build/probe.o"
-      wasm-ld --no-entry --export=lo_entry --allow-undefined "$build/probe.o" \
-        "$build/target/wasm32-unknown-unknown/release/liblo_runtime.a" -o "$build/probe.wasm"
-      command=(wasmrun "$build/probe.wasm")
-    fi
+    compile_probe probe.c "-DCASE=$case_id"
     status=0
     "${command[@]}" >"$build/out" 2>"$build/err" || status=$?
     if [[ $case_id == 0 ]]; then
@@ -48,5 +76,23 @@ for mode in native wasm; do
       fi
     fi
     echo "$mode case $case_id passed"
+  done
+done
+
+for mode in "${modes[@]}"; do
+  compile_probe boundaries.c -DCASE=0
+  positive boundaries
+  for seed in "${seeds[@]}"; do
+    compile_probe graph.c "-DSEED=$seed"
+    positive "graph seed=$seed gc-stress"
+  done
+done
+build_runtime gc-every-alloc
+for mode in "${modes[@]}"; do
+  compile_probe probe.c -DCASE=0
+  positive "preservation gc-every-alloc"
+  for seed in "${seeds[@]}"; do
+    compile_probe graph.c "-DSEED=$seed"
+    positive "graph seed=$seed gc-every-alloc"
   done
 done

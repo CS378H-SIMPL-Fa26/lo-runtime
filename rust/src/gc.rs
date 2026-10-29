@@ -379,14 +379,15 @@ mod tests {
     #[test]
     fn live_graph_preserved_and_pointers_rewritten() {
         with_runtime(None, || unsafe {
-            let mut frame = TestFrame::<1>::new();
+            let mut frame = TestFrame::<2>::new();
             lo_push_frame(frame.as_frame());
 
-            let _dead = lo_alloc(&NODE_CLASS);
-            let a = lo_alloc(&NODE_CLASS);
+            frame.roots[1] = lo_alloc(&NODE_CLASS); // retain gap until explicit GC
+            frame.roots[0] = lo_alloc(&NODE_CLASS);
             let b = lo_alloc(&NODE_CLASS);
+            let a = frame.roots[0]; // reload after the allocating call
             set_field(a, 16, b); // a.next = b
-            frame.roots[0] = a; // root = a
+            frame.roots[1] = core::ptr::null_mut();
 
             lo_gc_collect();
 
@@ -438,15 +439,16 @@ mod tests {
     #[test]
     fn string_survives_collection() {
         with_runtime(None, || unsafe {
-            let mut frame = TestFrame::<1>::new();
+            let mut frame = TestFrame::<2>::new();
             lo_push_frame(frame.as_frame());
 
-            let _dead = lo_alloc(&NODE_CLASS);
+            frame.roots[1] = lo_alloc(&NODE_CLASS);
             let bytes: &[u8] = b"hello, compactor";
             let s = bump_alloc_string(bytes.len() as u32);
             let data = (s as *mut u8).add(string_data_offset());
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), data, bytes.len());
             frame.roots[0] = s;
+            frame.roots[1] = core::ptr::null_mut();
 
             lo_gc_collect();
 
@@ -640,12 +642,11 @@ mod tests {
             lo_push_frame(outer.as_frame());
             lo_push_frame(inner.as_frame());
             let _gap = bump_alloc_string(600); // cross bitmap-word boundaries
-            let a = lo_alloc(&NODE_CLASS);
-            let b = lo_alloc(&NODE_CLASS);
-            set_field(a, 16, b);
-            set_field(b, 16, a);
-            outer.roots = [a, b];
-            inner.roots[0] = a;
+            outer.roots[0] = lo_alloc(&NODE_CLASS);
+            outer.roots[1] = lo_alloc(&NODE_CLASS);
+            set_field(outer.roots[0], 16, outer.roots[1]);
+            set_field(outer.roots[1], 16, outer.roots[0]);
+            inner.roots[0] = outer.roots[0];
             for _ in 0..8 {
                 for _ in 0..80 {
                     let _ = lo_alloc(&NODE_CLASS);

@@ -127,6 +127,8 @@ impl Heap {
     unsafe fn alloc(&mut self, size: Granules, class: *const ClassDescriptor) -> *mut Object {
         #[cfg(feature = "gc-verify")]
         self.verifier.register_descriptor(class);
+        #[cfg(feature = "gc-every-alloc")]
+        crate::gc::collect(self);
         let obj = match self.bump(size) {
             Some(obj) => obj,
             None => {

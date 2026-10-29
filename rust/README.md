@@ -112,9 +112,9 @@ cargo fmt --check
 bash tests/gc/check.sh
 ```
 
-The last command runs in the Linux x86-64 course environment with `cc`, `clang`,
+The last command runs on a native host and WASM with `cc`, `clang`,
 `wasm-ld`, `wasmrun` and the Rust WASM target installed. It builds both targets
-with `gc-stress`, then runs the same ten C-ABI probes on each: a preserving
+with `gc-stress`, then runs the same ten original C-ABI probes on each: a preserving
 cycle/shared-reference/string/static graph, eight deliberate corruptions, and
 a live-set overflow that must still produce the ABI's out-of-memory abort.
 Negative tests must produce the expected verifier diagnostic, not merely crash.
@@ -125,5 +125,70 @@ Native `LO_HEAP_SIZE` continues to override either default; freestanding WASM
 has no environment, so use the build feature for a tiny heap there. Do not use
 the stress feature for programs whose legitimate live set exceeds 4 KiB.
 
-The Liveoak repository also has five header-contract programs under `test/gc/`
-for end-to-end small-heap tests; see that directory's README.
+Compiler-level header-contract tests are included under `tests/gc/programs/`;
+see the commands below.
+
+### Finding collector bugs
+
+From the runtime repository root:
+
+```sh
+bash rust/tests/gc/check.sh
+# Only the host-native probes (no WASM toolchain required):
+MODES=native bash rust/tests/gc/check.sh
+# Reproduce or extend a deterministic graph run:
+SEEDS="1 7 42 12345 3735928559" bash rust/tests/gc/check.sh
+# Install the official nightly toolchain once for sanitizer support:
+rustup toolchain install nightly --profile minimal
+# Instrument the Rust collector AND C probes:
+bash rust/tests/gc/asan.sh
+```
+
+On macOS, use Homebrew LLVM rather than Apple Clang for WASM and ASan:
+
+```sh
+export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
+```
+
+`check.sh` retains the ten original ABI cases, then adds:
+
+- `boundaries.c`: objects beginning just before, at, and after a 512-byte
+  bitmap-block boundary; string lengths around granule/block boundaries;
+  overlapping moves; repeated hole creation; an exactly full 4 KiB heap;
+  reclamation of that entire heap and repeated empty collections.
+- `graph.c`: five reproducible seeds, each with 2,000 mutations of roots and
+  edges, allocations, and forced collections. A separate integer-only model
+  computes reachability. The test compares unique generation IDs, payloads,
+  both edges, cycles and shared identity after each mutation and collection.
+  Its temporary address map is rebuilt after every possible collection.
+- `gc-every-alloc`: a separate opt-in feature, implying `gc-stress`, that
+  collects **before every managed allocation**, including strings. The valid
+  preservation case and graph seeds run again with this feature. Boundary and
+  deliberate-corruption probes run only in the original mode because they
+  depend on exact allocation placement or a specific collection point.
+
+Native probes use the host architecture (ARM64 on an Apple Silicon Mac); run
+in the course Linux x86-64 container to cover the compiler's native target.
+
+The graph oracle catches wrong-but-valid references that the structural verifier
+cannot distinguish. ASan instruments both the C harness and Rust runtime (the
+prebuilt Rust standard library is not rebuilt). It catches host allocation
+bounds/use-after-free errors, but does not know individual object boundaries
+inside the managed heap; the verifier and model cover that gap. ASan failures
+stop the script. `CC`, `WASM_CC`, `WASM_LD`, and `WASMRUN` select test tools;
+`CC` also selects the ASan C compiler.
+
+Compiler tests live in `rust/tests/gc/programs/`: recursive caller roots,
+receivers held across allocating arguments, staged arguments, string fields,
+and string expression temporaries. From a compatible Liveoak checkout in the
+Linux x86-64 course environment, with this runtime checked out at `runtime/`:
+
+```sh
+cargo build --manifest-path runtime/rust/Cargo.toml --release --lib --features gc-every-alloc
+cargo build --manifest-path runtime/rust/Cargo.toml --release --lib --features gc-every-alloc --target wasm32-unknown-unknown
+LO_HEAP_SIZE=4096 dune exec -- lo_test_runner --tests runtime/rust/tests/gc/programs --level LO-3 --mode native,compile --no-docker
+```
+
+These require compiler support for static registration and untraced descriptor
+addresses, as described above. Run the larger general conformance suite with
+`gc-verify`, not a 4 KiB heap: some programs intentionally retain larger graphs.

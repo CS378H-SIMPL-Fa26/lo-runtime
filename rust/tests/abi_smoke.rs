@@ -102,10 +102,24 @@ fn empty_string_is_rodata_static() {
 #[test]
 fn alloc_advances_bump_pointer() {
     with_runtime(|| unsafe {
-        let a = lo_alloc(&LO_INT_BOX_CLASS);
+        #[repr(C)]
+        struct RootFrame {
+            parent: *mut ShadowFrame,
+            num_roots: u32,
+            roots: [*mut Object; 1],
+        }
+        let mut frame = RootFrame {
+            parent: core::ptr::null_mut(),
+            num_roots: 1,
+            roots: [core::ptr::null_mut()],
+        };
+        lo_push_frame((&mut frame as *mut RootFrame).cast());
+        frame.roots[0] = lo_alloc(&LO_INT_BOX_CLASS);
         let b = lo_alloc(&LO_INT_BOX_CLASS);
-        assert_ne!(a, b, "distinct allocations must not alias");
+        let a = frame.roots[0];
+        assert_ne!(a, b, "distinct live allocations must not alias");
         // instance_size 20 rounds to 24; the second object starts 24 bytes on.
         assert_eq!(b as usize - a as usize, 24);
+        lo_pop_frame();
     });
 }
