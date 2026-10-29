@@ -1,9 +1,8 @@
-# LO Runtime — Rust skeleton
+# LO Runtime — Rust
 
 Rust implementation of the LO runtime ABI ([`../runtime-abi.md`](../runtime-abi.md)).
-The provided entry points work out of the box; the stubbed ones (`lo_gc_collect`,
-the `lo_string_*` ops, `lo_cast_check` / `lo_instanceof`) panic with
-`unimplemented!()` until your team fills them in for P3.
+This branch implements sliding mark-compaction, string operations and runtime
+type checks. The optional heap verifier checks the collector on both targets.
 
 ## Toolchain
 
@@ -50,18 +49,81 @@ src/
 ├── init.rs           # lo_runtime_init / lo_runtime_shutdown
 ├── io.rs             # lo_print_* / lo_read_* / lo_println / lo_eof
 ├── gc.rs             # lo_gc_write_barrier + the sliding mark-compact collector
-├── gc/               # the collector's mark bitmap and offset table
+├── gc/               # mark bitmap, offset table and debug heap verifier
 ├── layout.rs         # object sizes in granules, layouts, reference slots
-├── string_ops.rs     # string op stubs
-├── cast.rs           # cast/instanceof stubs
+├── string_ops.rs     # string operations
+├── cast.rs           # cast/instanceof checks
 ├── abort.rs          # runtime abort paths + lo_abort_null_receiver
 └── bin/lo_io_probe.rs # I/O test driver (not part of the shipped runtime)
 ```
 
-## What to implement in P3
+## Debug heap verifier
 
-Start in `gc.rs` (`lo_gc_collect` + the OOM-retry path in `alloc.rs`), then the
-`string_ops.rs` and `cast.rs` stubs. The internal variable-size string allocator
-`alloc::bump_alloc_string` is the pattern to build string results with. The
-instructor's acceptance baseline is Cheney's semispace with all shared tests
-passing (`../runtime-abi.md` §4.5).
+Build with `--features gc-verify` to check the heap **before and after every
+collection**, including allocation-triggered collections. This also works in
+release builds and on `wasm32-unknown-unknown`; it needs no environment variable.
+Without the feature there are no registry, bitmap or verifier walks.
+
+The verifier checks:
+
+- bounded, aligned object traversal up to the allocation frontier, including
+  variable-size strings and zero GC header bits;
+- descriptor identity against descriptors recorded at the trusted allocation
+  boundary, with snapshots of size and pointer offsets;
+- every root and pointer field against **exact object starts**, null, or an
+  explicitly registered immortal object (interior and free-tail pointers fail);
+- registered statics' headers and edges (statics may not hold managed edges,
+  because this collector does not trace them);
+- `0xEF` in the entire free tail, including never-allocated space. Allocation
+  zeroes each claimed region; collection re-poisons the full free tail.
+
+The scratch object-start bitmap is allocated at heap initialization and reused.
+Descriptor/static registration may allocate Rust-side metadata, but the successful
+verification walk allocates nothing and never invokes the managed allocator.
+It does not use the collector's mark/forwarding tables to validate object starts.
+Failure reports `lo_gc_verify: before/after collection: ... at ...` and exits
+134 on native or reports through host stderr and traps on WASM.
+
+`LO_EMPTY_STRING` is registered automatically. Compilers/embedding programs must
+call the diagnostic extension `lo_gc_register_static(object)` after runtime init
+for every other immortal object, before storing it in a root or heap field.
+The object and its descriptor/offset table must be valid immutable storage for
+the runtime's lifetime. The extension is exported as a no-op when verification
+is disabled, and never collects. Liveoak registers native literal objects and
+both backends' preamble objects at startup. Raw descriptor/function addresses
+belong in untraced values, not object roots. This extension requires the updated
+runtime when linking the updated compiler; it does not change object/frame ABI.
+
+Trusted boundaries: valid shadow-frame links/storage and the descriptor/static
+storage supplied to the registration/allocation APIs. The checker cannot recover
+a missing root or detect a stale address that happens to identify another valid
+object. It is a structural diagnostic, not a replacement for graph/payload tests.
+
+### Reproduce the checks
+
+From `rust/`:
+
+```sh
+cargo test
+cargo test --features gc-verify
+cargo test --features gc-stress
+cargo clippy --all-targets --features gc-verify -- -D warnings
+cargo fmt --check
+bash tests/gc/check.sh
+```
+
+The last command runs in the Linux x86-64 course environment with `cc`, `clang`,
+`wasm-ld`, `wasmrun` and the Rust WASM target installed. It builds both targets
+with `gc-stress`, then runs the same ten C-ABI probes on each: a preserving
+cycle/shared-reference/string/static graph, eight deliberate corruptions, and
+a live-set overflow that must still produce the ABI's out-of-memory abort.
+Negative tests must produce the expected verifier diagnostic, not merely crash.
+
+`gc-stress` implies `gc-verify` and changes the default heap to **4 KiB** for
+deterministic pressure on both targets. Normal builds still default to 16 MiB.
+Native `LO_HEAP_SIZE` continues to override either default; freestanding WASM
+has no environment, so use the build feature for a tiny heap there. Do not use
+the stress feature for programs whose legitimate live set exceeds 4 KiB.
+
+The Liveoak repository also has five header-contract programs under `test/gc/`
+for end-to-end small-heap tests; see that directory's README.

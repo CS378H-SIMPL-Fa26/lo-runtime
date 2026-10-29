@@ -22,6 +22,8 @@
 
 mod bitmap;
 mod offsets;
+#[cfg(feature = "gc-verify")]
+pub(crate) mod verify;
 
 use core::ptr;
 
@@ -66,23 +68,56 @@ pub extern "C" fn lo_gc_collect() {
 
 /// One collection cycle.
 pub(crate) fn collect(heap: &mut Heap) {
+    #[cfg(feature = "gc-verify")]
+    verify::assert_valid(heap, "before collection");
     let old_top = heap.top;
     let plan = Marking::begin(heap).trace().plan();
     plan.fix_roots();
     let new_top = plan.compact();
     heap.top = new_top;
 
-    // Debug instrumentation (off unless `LO_GC_POISON` is set): scribble the
-    // vacated tail `[new_top, old_top)` with a poison byte. Nothing live is there
+    // Debug instrumentation: LO_GC_POISON scribbles the vacated tail, while
+    // gc-verify poisons the entire free tail through the region end.
+    // Nothing live is there
     // any more, so a *stale* pointer into it (one the collector did not relocate
     // because it was not a registered root) reads a deterministic `0xEFEFEFEF…`
     // instead of possibly-still-intact old bytes. Not part of the ABI; zero cost
     // when disabled.
-    if poison_enabled() {
+    if cfg!(feature = "gc-verify") || poison_enabled() {
         let tail = heap.region.addr(new_top) as *mut u8;
-        // SAFETY: `[new_top, old_top)` lies inside the region and holds no object.
-        unsafe { ptr::write_bytes(tail, 0xEF, old_top.bytes() - new_top.bytes()) };
+        let end = if cfg!(feature = "gc-verify") {
+            heap.region.end()
+        } else {
+            old_top
+        };
+        // SAFETY: `[new_top, end)` lies inside the region and holds no object.
+        unsafe { ptr::write_bytes(tail, 0xEF, end.bytes() - new_top.bytes()) };
     }
+    #[cfg(feature = "gc-verify")]
+    verify::assert_valid(heap, "after collection");
+}
+
+/// Register a compiler-generated immortal object for the debug heap verifier.
+/// This diagnostic extension is a no-op without `gc-verify`; it never collects.
+/// Call after runtime init and before making the static reachable from roots.
+/// `LO_EMPTY_STRING` is registered automatically.
+///
+/// # Safety
+/// `object` and its descriptor/offset table must be valid immutable static data
+/// for the lifetime of the runtime. Static objects must not contain heap edges.
+#[no_mangle]
+pub unsafe extern "C" fn lo_gc_register_static(object: *mut Object) {
+    #[cfg(feature = "gc-verify")]
+    with_heap(|heap| {
+        let heap = heap.as_mut().expect("register static after runtime init");
+        assert!(
+            heap.region.locate(object, heap.region.end()).is_none(),
+            "gc verifier: a managed object cannot be registered as static"
+        );
+        heap.verifier.register_static(object);
+    });
+    #[cfg(not(feature = "gc-verify"))]
+    let _ = object;
 }
 
 /// Phase 1: tracing from the roots into a cleared bitmap.
@@ -482,6 +517,150 @@ mod tests {
             let live2 = frame.roots[0];
             assert_eq!((*live2).class_descriptor, &NODE_CLASS as *const _);
 
+            lo_pop_frame();
+        });
+    }
+
+    #[cfg(feature = "gc-verify")]
+    fn checked_heap() -> Result<(), super::verify::Error> {
+        crate::alloc::with_heap(|heap| super::verify::check(heap.as_mut().unwrap()))
+    }
+
+    #[cfg(feature = "gc-verify")]
+    #[test]
+    fn verifier_rejects_corrupt_headers_fields_roots_and_free_space() {
+        with_runtime(Some("4096"), || unsafe {
+            let mut frame = TestFrame::<1>::new();
+            lo_push_frame(frame.as_frame());
+            let node = lo_alloc(&NODE_CLASS);
+            frame.roots[0] = node;
+            assert_eq!(checked_heap(), Ok(()));
+
+            // Reject BEFORE dereferencing an unknown descriptor.
+            (*node).class_descriptor = 1usize as *const ClassDescriptor;
+            assert_eq!(checked_heap().unwrap_err().kind, "unknown descriptor");
+            (*node).class_descriptor = &NODE_CLASS;
+            (*node).gc_bits = 1;
+            assert_eq!(
+                checked_heap().unwrap_err().kind,
+                "unexpected GC header bits"
+            );
+            (*node).gc_bits = 0;
+
+            for displacement in [1, 8, 16] {
+                set_field(node, 16, (node as *mut u8).add(displacement) as *mut Object);
+                assert_eq!(
+                    checked_heap().unwrap_err().kind,
+                    "reference is not an object start"
+                );
+            }
+            set_field(node, 16, (node as *mut u8).add(24) as *mut Object);
+            assert_eq!(checked_heap().unwrap_err().kind, "reference into free heap");
+            set_field(node, 16, 1usize as *mut Object);
+            assert_eq!(
+                checked_heap().unwrap_err().kind,
+                "unregistered non-heap reference"
+            );
+            set_field(node, 16, core::ptr::null_mut());
+
+            frame.roots[0] = (node as *mut u8).add(24) as *mut Object;
+            assert_eq!(checked_heap().unwrap_err().kind, "reference into free heap");
+            frame.roots[0] = node;
+            *((node as *mut u8).add(24)) = 0;
+            assert_eq!(
+                checked_heap().unwrap_err().kind,
+                "free space is not poisoned"
+            );
+            *((node as *mut u8).add(24)) = 0xEF;
+            assert_eq!(checked_heap(), Ok(()));
+            lo_gc_collect();
+            assert_eq!(checked_heap(), Ok(()));
+            assert_eq!(frame.roots[0], node);
+            lo_pop_frame();
+        });
+    }
+
+    #[cfg(feature = "gc-verify")]
+    #[test]
+    fn verifier_checks_variable_sizes_and_registered_statics() {
+        with_runtime(Some("4096"), || unsafe {
+            let mut frame = TestFrame::<1>::new();
+            lo_push_frame(frame.as_frame());
+            let string = bump_alloc_string(7);
+            frame.roots[0] = string;
+            (*(string as *mut StringObject)).length = u32::MAX;
+            assert!(matches!(
+                checked_heap().unwrap_err().kind,
+                "object extends beyond allocation frontier" | "string size overflow"
+            ));
+            (*(string as *mut StringObject)).length = 7;
+            assert_eq!(checked_heap(), Ok(()));
+
+            // A readable object is NOT automatically an approved static.
+            // The Box lives until shutdown, meeting registration's lifetime.
+            let mut immortal = Box::new(Object {
+                class_descriptor: &crate::descriptors::LO_BOOL_BOX_CLASS,
+                gc_bits: 0,
+                flags: 0,
+            });
+            // Use a header-only descriptor: no trailing bytes are read.
+            let static_class = Box::new(ClassDescriptor {
+                name: c"Static".as_ptr() as *const u8,
+                name_len: 6,
+                parent: core::ptr::null(),
+                instance_size: core::mem::size_of::<Object>() as u32,
+                pointer_offsets: core::ptr::null(),
+                pointer_count: 0,
+                vtable_size: 0,
+                vtable: core::ptr::null(),
+            });
+            immortal.class_descriptor = &*static_class;
+            let address = &mut *immortal as *mut Object;
+            frame.roots[0] = address;
+            assert_eq!(
+                checked_heap().unwrap_err().kind,
+                "unregistered non-heap reference"
+            );
+            super::lo_gc_register_static(address);
+            assert_eq!(checked_heap(), Ok(()));
+            lo_gc_collect();
+            assert_eq!(frame.roots[0], address);
+            assert_eq!(heap_used(), 0);
+            lo_pop_frame();
+            // Registry must be dropped before its trusted backing storage.
+            lo_runtime_shutdown();
+        });
+    }
+
+    #[test]
+    fn cycles_shared_edges_nested_frames_and_full_reclamation() {
+        with_runtime(Some("4096"), || unsafe {
+            let mut outer = TestFrame::<2>::new();
+            let mut inner = TestFrame::<1>::new();
+            lo_push_frame(outer.as_frame());
+            lo_push_frame(inner.as_frame());
+            let _gap = bump_alloc_string(600); // cross bitmap-word boundaries
+            let a = lo_alloc(&NODE_CLASS);
+            let b = lo_alloc(&NODE_CLASS);
+            set_field(a, 16, b);
+            set_field(b, 16, a);
+            outer.roots = [a, b];
+            inner.roots[0] = a;
+            for _ in 0..8 {
+                for _ in 0..80 {
+                    let _ = lo_alloc(&NODE_CLASS);
+                }
+                lo_gc_collect();
+                assert_eq!(inner.roots[0], outer.roots[0]);
+                assert_eq!(get_field(outer.roots[0], 16), outer.roots[1]);
+                assert_eq!(get_field(outer.roots[1], 16), outer.roots[0]);
+                assert_eq!(heap_used(), 48);
+            }
+            lo_pop_frame();
+            outer.roots.fill(core::ptr::null_mut());
+            lo_gc_collect();
+            assert_eq!(heap_used(), 0);
+            lo_gc_collect(); // empty heap, including poisoned tail
             lo_pop_frame();
         });
     }

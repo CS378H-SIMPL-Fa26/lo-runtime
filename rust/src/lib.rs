@@ -56,7 +56,7 @@ pub use io::{
 
 pub use abort::lo_abort_null_receiver;
 pub use cast::{lo_cast_check, lo_instanceof};
-pub use gc::{lo_gc_collect, lo_gc_write_barrier};
+pub use gc::{lo_gc_collect, lo_gc_register_static, lo_gc_write_barrier};
 pub use string_ops::{
     lo_string_compare, lo_string_concat, lo_string_new, lo_string_repeat, lo_string_reverse,
 };

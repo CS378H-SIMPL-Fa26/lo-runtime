@@ -25,7 +25,11 @@ use crate::layout::{Granule, Granules, BLOCK_GRANULES, GRANULE};
 use crate::object::{string_data_offset, ClassDescriptor, Object, StringObject};
 
 /// Default heap size (16 MiB), overridable via `LO_HEAP_SIZE` at init.
-const DEFAULT_HEAP_SIZE: usize = 16 * 1024 * 1024;
+const DEFAULT_HEAP_SIZE: usize = if cfg!(feature = "gc-stress") {
+    4096
+} else {
+    16 * 1024 * 1024
+};
 
 /// The heap's backing memory: zero-initialized granules `[0, end)` from `base`,
 /// freed on drop.
@@ -62,6 +66,10 @@ impl Region {
         debug_assert!(g <= self.end);
         self.base.as_ptr().wrapping_add(g.bytes()) as *mut Object
     }
+
+    pub(crate) fn end(&self) -> Granule {
+        self.end
+    }
 }
 
 impl Drop for Region {
@@ -80,18 +88,32 @@ pub(crate) struct Heap {
     pub(crate) offsets: OffsetTable,
     /// Kept between collections so its capacity is reused.
     pub(crate) mark_stack: Vec<Granule>,
+    #[cfg(feature = "gc-verify")]
+    pub(crate) verifier: crate::gc::verify::Verifier,
 }
 
 impl Heap {
     fn new(capacity: Granules) -> Heap {
         let region = Region::new(capacity);
         let blocks = region.end.blocks_below();
+        #[cfg(feature = "gc-verify")]
+        unsafe {
+            // The entire initial free region has the same invariant as the
+            // free tail after a collection. Allocation zeroes claimed bytes.
+            ptr::write_bytes(
+                region.addr(Granule::ZERO) as *mut u8,
+                0xEF,
+                capacity.bytes(),
+            );
+        }
         Heap {
             region,
             top: Granule::ZERO,
             bitmap: MarkBitmap::new(blocks),
             offsets: OffsetTable::new(blocks),
             mark_stack: Vec::new(),
+            #[cfg(feature = "gc-verify")]
+            verifier: crate::gc::verify::Verifier::new(blocks),
         }
     }
 
@@ -103,6 +125,8 @@ impl Heap {
     /// `class` must point at a valid, live `ClassDescriptor`. `size` must hold at
     /// least the header.
     unsafe fn alloc(&mut self, size: Granules, class: *const ClassDescriptor) -> *mut Object {
+        #[cfg(feature = "gc-verify")]
+        self.verifier.register_descriptor(class);
         let obj = match self.bump(size) {
             Some(obj) => obj,
             None => {
