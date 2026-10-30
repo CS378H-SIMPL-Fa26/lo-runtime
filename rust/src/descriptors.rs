@@ -47,15 +47,15 @@ pub static LO_BOOL_BOX_CLASS: ClassDescriptor = ClassDescriptor {
 
 /// The canonical length-0 `StringObject` (`runtime-abi.md` §2.3, runbook WS-2
 /// §2.5). Defined as a **read-only static object in `.rodata`** — not
-/// heap-allocated — so its address is a link-time constant that lies outside both
-/// semispaces by construction. The symbol denotes the object itself; codegen
+/// heap-allocated — so its address is a link-time constant that lies outside the
+/// managed heap by construction. The symbol denotes the object itself; codegen
 /// references its address directly (no load) to initialize String-typed fields to
 /// their LO default (the empty string).
 ///
 /// This replaces the WS-1 init-time allocation: `lo_runtime_init` no longer
-/// allocates the empty string. Because it is never *in* from-space, the
-/// collector's `forward` range-check returns it untouched with no special case
-/// (runbook WS-2 §2.5), and being read-only storage, a buggy collector that
+/// allocates the empty string. Because it is never *in* the heap, the
+/// collector's range check (`Region::locate`) leaves it untouched with no special
+/// case (runbook WS-2 §2.5), and being read-only storage, a buggy collector that
 /// forgot to range-guard before writing its header would fault loudly rather than
 /// corrupt a shared object.
 ///

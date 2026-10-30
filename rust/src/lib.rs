@@ -11,9 +11,10 @@
 //! - [`descriptors`] — built-in class descriptors + the `LO_EMPTY_STRING` singleton.
 //! - [`alloc`] — bump allocator behind `lo_alloc`.
 //! - [`shadow_stack`] — root-tracking frame list.
+//! - [`layout`] — object sizes in granules, layouts, and reference slots.
 //! - [`init`] — runtime lifecycle.
 //! - [`io`] — print / read / EOF.
-//! - [`gc`] — write barrier (provided) + collect (stub).
+//! - [`gc`] — write barrier + the sliding mark-compact collector.
 //! - [`string_ops`], [`cast`] — stubs.
 //! - [`abort`] — runtime abort paths + `lo_abort_null_receiver`.
 //!
@@ -27,6 +28,7 @@ mod descriptors;
 mod gc;
 mod init;
 mod io;
+mod layout;
 mod object;
 mod shadow_stack;
 mod string_ops;
@@ -54,7 +56,7 @@ pub use io::{
 
 pub use abort::lo_abort_null_receiver;
 pub use cast::{lo_cast_check, lo_instanceof};
-pub use gc::{lo_gc_collect, lo_gc_write_barrier};
+pub use gc::{lo_gc_collect, lo_gc_register_static, lo_gc_write_barrier};
 pub use string_ops::{
     lo_string_compare, lo_string_concat, lo_string_new, lo_string_repeat, lo_string_reverse,
 };

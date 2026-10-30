@@ -10,9 +10,10 @@
 //! so the `static_mut_refs` lint stays quiet. Invariant: single-threaded; only
 //! the functions here mutate the head.
 
-use core::ptr;
+use core::ptr::{self, NonNull};
 
-use crate::object::ShadowFrame;
+use crate::layout::Slot;
+use crate::object::{shadow_frame_roots_offset, Object, ShadowFrame};
 
 static mut CURRENT_FRAME: *mut ShadowFrame = ptr::null_mut();
 
@@ -56,4 +57,19 @@ pub(crate) fn reset() {
 pub fn current_frame() -> *mut ShadowFrame {
     // SAFETY: single-threaded; by-value read of a raw pointer.
     unsafe { CURRENT_FRAME }
+}
+
+/// Every root slot of every registered frame, walking `current_frame` ->
+/// `parent` to null (ABI §3.3). The shadow stack is the complete root set.
+pub(crate) fn roots() -> impl Iterator<Item = Slot> {
+    // SAFETY: `lo_push_frame`'s contract keeps every registered frame, and so its
+    // inline roots, valid until the matching pop.
+    let frames = core::iter::successors(NonNull::new(current_frame()), |frame| unsafe {
+        NonNull::new((*frame.as_ptr()).parent)
+    });
+    frames.flat_map(|frame| unsafe {
+        let frame = frame.as_ptr();
+        let roots = (frame as *mut u8).add(shadow_frame_roots_offset()) as *mut *mut Object;
+        (0..(*frame).num_roots as usize).map(move |i| Slot::new(roots.add(i)))
+    })
 }

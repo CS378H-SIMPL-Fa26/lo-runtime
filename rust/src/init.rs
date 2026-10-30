@@ -1,8 +1,9 @@
 //! Runtime lifecycle (`runtime-abi.md` §3.6).
 
 /// Initialize the runtime. Must be called before any other entry point: brings
-/// up the heap (two semispaces) and resets the shadow-stack head. Codegen emits a
-/// call at the top of `main` (native) or in the WASM `start` function.
+/// up the heap and the collector's side tables, and resets the shadow-stack
+/// head. Codegen emits a call at the top of `main` (native) or in the WASM
+/// `start` function.
 ///
 /// `LO_EMPTY_STRING` is a `.rodata` static and needs no initialization
 /// (`runtime-abi.md` §2.3, §3.6; runbook WS-2 §2.5) — the WS-1 init-time

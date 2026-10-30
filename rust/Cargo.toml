@@ -17,6 +17,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 # std::io (see src/io.rs for why libc is not used here). No runtime deps.
 [dependencies]
 
+[features]
+# Debug heap validation on both native and freestanding WASM, including release.
+gc-verify = []
+# Deterministic 4 KiB default on WASM (which has no environment variables).
+# Native LO_HEAP_SIZE can still override it. Testing only, never a release default.
+gc-stress = ["gc-verify"]
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
