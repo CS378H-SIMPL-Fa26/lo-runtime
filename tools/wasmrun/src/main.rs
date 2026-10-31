@@ -164,7 +164,14 @@ fn abort_exit(err: anyhow::Error, emitted: Option<Vec<u8>>) -> i32 {
     // via `host_write_stderr` before trapping (now every abort kind emits);
     // the documented §3.8 fallbacks below fire only if emission was somehow absent.
     let bt = format!("{err:?}");
-    let (code, fallback): (i32, &str) = if bt.contains("lo_abort_null_receiver") {
+    // Allocation can fail inside string repetition. The emitted OOM diagnostic
+    // distinguishes that case from a negative repeat count, even with inlining.
+    let (code, fallback): (i32, &str) = if emitted
+        .as_deref()
+        .is_some_and(|message| message.starts_with(b"lo_alloc: out of memory"))
+    {
+        (137, "lo_alloc: out of memory")
+    } else if bt.contains("lo_abort_null_receiver") {
         (102, "lo_abort_null_receiver: cannot dispatch <method>")
     } else if bt.contains("lo_cast_check") {
         (101, "lo_cast_check: cast failure")
@@ -294,4 +301,25 @@ fn wire_host(linker: &mut Linker<Ctx>) {
             i32::from(c.data().at_eof())
         })
         .unwrap();
+}
+
+#[cfg(test)]
+mod abort_tests {
+    use super::abort_exit;
+
+    #[test]
+    fn oom_inside_repeat_uses_allocation_exit_code() {
+        assert_eq!(abort_exit(
+            anyhow::anyhow!("trap in lo_string_repeat, called lo_alloc"),
+            Some(b"lo_alloc: out of memory".to_vec()),
+        ), 137);
+    }
+
+    #[test]
+    fn negative_repeat_keeps_its_exit_code() {
+        assert_eq!(abort_exit(
+            anyhow::anyhow!("trap in lo_string_repeat"),
+            Some(b"lo_string_repeat: negative count -3".to_vec()),
+        ), 120);
+    }
 }
