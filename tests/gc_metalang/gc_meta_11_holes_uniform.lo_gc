@@ -1,0 +1,107 @@
+# Dead regions before survivors; uniform gaps as control.
+# Native sweeps vary heap externally; WASM keeps its default heap.
+heap 262144
+expect success
+
+func leaf 0
+    alloc 16384 scratch
+    scratch = null
+end
+
+func phase1 0
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+end
+
+func phase2 0
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+end
+
+func phase3 0
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+end
+
+func phase4 0
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+end
+
+func main 0
+    alloc 2048 dead0
+    alloc 1024 live0
+    alloc 2048 dead1
+    alloc 1024 live1
+    alloc 2048 dead2
+    alloc 1024 live2
+    alloc 2048 dead3
+    alloc 1024 live3
+    alloc 2048 dead4
+    alloc 1024 live4
+    alloc 2048 dead5
+    alloc 1024 live5
+    alloc 2048 dead6
+    alloc 1024 live6
+    alloc 2048 dead7
+    alloc 1024 live7
+    alloc 2048 dead8
+    alloc 1024 live8
+    alloc 2048 dead9
+    alloc 1024 live9
+    alloc 2048 dead10
+    alloc 1024 live10
+    alloc 2048 dead11
+    alloc 1024 live11
+    alloc 2048 dead12
+    alloc 1024 live12
+    alloc 2048 dead13
+    alloc 1024 live13
+    alloc 2048 dead14
+    alloc 1024 live14
+    alloc 2048 dead15
+    alloc 1024 live15
+    dead0 = null
+    dead1 = null
+    dead2 = null
+    dead3 = null
+    dead4 = null
+    dead5 = null
+    dead6 = null
+    dead7 = null
+    dead8 = null
+    dead9 = null
+    dead10 = null
+    dead11 = null
+    dead12 = null
+    dead13 = null
+    dead14 = null
+    dead15 = null
+    call phase4
+    alloc 32768 large
+    call phase3
+end

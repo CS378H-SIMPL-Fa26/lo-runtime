@@ -81,3 +81,13 @@ C-side and empirical checks:
 All pin, on 64-bit: `sizeof(Object) == 16`, string data at offset `20`, shadow
 frame roots at offset `16` (and `12 / 16 / 8` on 32-bit / WASM). If a skeleton's
 layout ever drifts, its own compile-time check fails the build.
+
+## Generated string GC stress corpus
+
+`gc_metalang/` contains 20 `.lo_gc` workloads. The OCaml
+[GC test generator](../gc-test-generator/README.md) lowers these to
+`lo_programs/gc_meta_*.lo` and `expected/gc_meta_*.expected.out`.
+Eighteen cases expect successful content preservation and two expect a diagnosed
+OOM abort. Unlike the older smoke fixtures above, their stdout filenames end in
+`.expected.out`. See the generator README for regeneration, semantics checks,
+and WASM/native execution commands.

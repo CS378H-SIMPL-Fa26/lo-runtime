@@ -1,0 +1,51 @@
+# Release versus retain: nine 2 MiB strings; release each helper frame before the next call.
+heap 8388608
+expect success
+
+func batch0 0
+    alloc 2097152 value
+end
+
+func batch1 0
+    alloc 2097152 value
+end
+
+func batch2 0
+    alloc 2097152 value
+end
+
+func batch3 0
+    alloc 2097152 value
+end
+
+func batch4 0
+    alloc 2097152 value
+end
+
+func batch5 0
+    alloc 2097152 value
+end
+
+func batch6 0
+    alloc 2097152 value
+end
+
+func batch7 0
+    alloc 2097152 value
+end
+
+func batch8 0
+    alloc 2097152 value
+end
+
+func main 0
+    call batch0
+    call batch1
+    call batch2
+    call batch3
+    call batch4
+    call batch5
+    call batch6
+    call batch7
+    call batch8
+end

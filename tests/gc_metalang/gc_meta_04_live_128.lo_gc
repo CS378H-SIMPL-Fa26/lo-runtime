@@ -1,0 +1,185 @@
+# Persistent-set ladder: 128 x 512-byte anchors, identical churn.
+# Native sweeps vary heap externally; WASM keeps its default heap.
+heap 262144
+expect success
+
+func leaf 0
+    alloc 16384 scratch
+    scratch = null
+end
+
+func phase1 0
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+end
+
+func phase2 0
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+end
+
+func phase3 0
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+end
+
+func phase4 0
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+end
+
+func main 0
+    alloc 512 anchor0
+    alloc 512 anchor1
+    alloc 512 anchor2
+    alloc 512 anchor3
+    alloc 512 anchor4
+    alloc 512 anchor5
+    alloc 512 anchor6
+    alloc 512 anchor7
+    alloc 512 anchor8
+    alloc 512 anchor9
+    alloc 512 anchor10
+    alloc 512 anchor11
+    alloc 512 anchor12
+    alloc 512 anchor13
+    alloc 512 anchor14
+    alloc 512 anchor15
+    alloc 512 anchor16
+    alloc 512 anchor17
+    alloc 512 anchor18
+    alloc 512 anchor19
+    alloc 512 anchor20
+    alloc 512 anchor21
+    alloc 512 anchor22
+    alloc 512 anchor23
+    alloc 512 anchor24
+    alloc 512 anchor25
+    alloc 512 anchor26
+    alloc 512 anchor27
+    alloc 512 anchor28
+    alloc 512 anchor29
+    alloc 512 anchor30
+    alloc 512 anchor31
+    alloc 512 anchor32
+    alloc 512 anchor33
+    alloc 512 anchor34
+    alloc 512 anchor35
+    alloc 512 anchor36
+    alloc 512 anchor37
+    alloc 512 anchor38
+    alloc 512 anchor39
+    alloc 512 anchor40
+    alloc 512 anchor41
+    alloc 512 anchor42
+    alloc 512 anchor43
+    alloc 512 anchor44
+    alloc 512 anchor45
+    alloc 512 anchor46
+    alloc 512 anchor47
+    alloc 512 anchor48
+    alloc 512 anchor49
+    alloc 512 anchor50
+    alloc 512 anchor51
+    alloc 512 anchor52
+    alloc 512 anchor53
+    alloc 512 anchor54
+    alloc 512 anchor55
+    alloc 512 anchor56
+    alloc 512 anchor57
+    alloc 512 anchor58
+    alloc 512 anchor59
+    alloc 512 anchor60
+    alloc 512 anchor61
+    alloc 512 anchor62
+    alloc 512 anchor63
+    alloc 512 anchor64
+    alloc 512 anchor65
+    alloc 512 anchor66
+    alloc 512 anchor67
+    alloc 512 anchor68
+    alloc 512 anchor69
+    alloc 512 anchor70
+    alloc 512 anchor71
+    alloc 512 anchor72
+    alloc 512 anchor73
+    alloc 512 anchor74
+    alloc 512 anchor75
+    alloc 512 anchor76
+    alloc 512 anchor77
+    alloc 512 anchor78
+    alloc 512 anchor79
+    alloc 512 anchor80
+    alloc 512 anchor81
+    alloc 512 anchor82
+    alloc 512 anchor83
+    alloc 512 anchor84
+    alloc 512 anchor85
+    alloc 512 anchor86
+    alloc 512 anchor87
+    alloc 512 anchor88
+    alloc 512 anchor89
+    alloc 512 anchor90
+    alloc 512 anchor91
+    alloc 512 anchor92
+    alloc 512 anchor93
+    alloc 512 anchor94
+    alloc 512 anchor95
+    alloc 512 anchor96
+    alloc 512 anchor97
+    alloc 512 anchor98
+    alloc 512 anchor99
+    alloc 512 anchor100
+    alloc 512 anchor101
+    alloc 512 anchor102
+    alloc 512 anchor103
+    alloc 512 anchor104
+    alloc 512 anchor105
+    alloc 512 anchor106
+    alloc 512 anchor107
+    alloc 512 anchor108
+    alloc 512 anchor109
+    alloc 512 anchor110
+    alloc 512 anchor111
+    alloc 512 anchor112
+    alloc 512 anchor113
+    alloc 512 anchor114
+    alloc 512 anchor115
+    alloc 512 anchor116
+    alloc 512 anchor117
+    alloc 512 anchor118
+    alloc 512 anchor119
+    alloc 512 anchor120
+    alloc 512 anchor121
+    alloc 512 anchor122
+    alloc 512 anchor123
+    alloc 512 anchor124
+    alloc 512 anchor125
+    alloc 512 anchor126
+    alloc 512 anchor127
+    call phase4
+end
