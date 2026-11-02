@@ -1,0 +1,6 @@
+heap 65536
+expect oom
+
+func main 0
+    alloc 33554432 huge
+end

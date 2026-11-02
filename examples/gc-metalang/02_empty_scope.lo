@@ -1,0 +1,70 @@
+// good test case
+// main method return value: 0
+// gc stress heap: 65536
+class Main ( String canonical; ) [ Main() { ; } ] {
+    void leaf() {
+        String scratch;
+        scratch = ("x" * 16384);
+        if ((scratch = ("x" * 16384))) { ; }
+        else { out.print_bool(false); out.println(); }
+        scratch = canonical;
+    }
+    void phase1() {
+        this.leaf();
+        this.leaf();
+        this.leaf();
+        this.leaf();
+        this.leaf();
+        this.leaf();
+        this.leaf();
+        this.leaf();
+    }
+    void phase2() {
+        this.phase1();
+        this.phase1();
+        this.phase1();
+        this.phase1();
+        this.phase1();
+        this.phase1();
+        this.phase1();
+        this.phase1();
+    }
+    void phase3() {
+        this.phase2();
+        this.phase2();
+        this.phase2();
+        this.phase2();
+        this.phase2();
+        this.phase2();
+        this.phase2();
+        this.phase2();
+    }
+    void phase4() {
+        this.phase3();
+        this.phase3();
+        this.phase3();
+        this.phase3();
+        this.phase3();
+        this.phase3();
+        this.phase3();
+        this.phase3();
+    }
+    void hold(String arg0, String arg1) {
+        this.phase4();
+        out.print_bool((arg0 = "")); out.println();
+        out.print_bool((arg1 = ("x" * 1024))); out.println();
+        arg0 = canonical;
+    }
+    int main() {
+        String anchor; String discarded; String empty;
+        anchor = ("x" * 1024);
+        discarded = ("x" * 8);
+        discarded = canonical;
+        empty = canonical;
+        this.hold(empty, anchor);
+        out.print_bool((anchor = ("x" * 1024))); out.println();
+        out.print_bool((empty = "")); out.println();
+        anchor = canonical;
+        return 0;
+    }
+}

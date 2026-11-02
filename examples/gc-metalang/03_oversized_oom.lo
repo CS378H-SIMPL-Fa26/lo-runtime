@@ -1,0 +1,11 @@
+// runtime abort test case
+// expected exit code: 137
+// expected stderr substring: lo_alloc: out of memory
+// gc stress heap: 65536
+class Main () [ Main() { ; } ] {
+    int main() {
+        String huge;
+        huge = ("x" * 33554432);
+        if ((huge = "")) { return 1; } else { return 2; }
+    }
+}
