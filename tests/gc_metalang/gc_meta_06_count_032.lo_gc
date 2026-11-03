@@ -1,0 +1,89 @@
+# Equal payload comparison: 32 x 2048 = 65536 retained bytes.
+# Native sweeps vary heap externally; WASM keeps its default heap.
+heap 262144
+expect success
+
+func leaf 0
+    alloc 16384 scratch
+    scratch = null
+end
+
+func phase1 0
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+end
+
+func phase2 0
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+end
+
+func phase3 0
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+end
+
+func phase4 0
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+end
+
+func main 0
+    alloc 2048 anchor0
+    alloc 2048 anchor1
+    alloc 2048 anchor2
+    alloc 2048 anchor3
+    alloc 2048 anchor4
+    alloc 2048 anchor5
+    alloc 2048 anchor6
+    alloc 2048 anchor7
+    alloc 2048 anchor8
+    alloc 2048 anchor9
+    alloc 2048 anchor10
+    alloc 2048 anchor11
+    alloc 2048 anchor12
+    alloc 2048 anchor13
+    alloc 2048 anchor14
+    alloc 2048 anchor15
+    alloc 2048 anchor16
+    alloc 2048 anchor17
+    alloc 2048 anchor18
+    alloc 2048 anchor19
+    alloc 2048 anchor20
+    alloc 2048 anchor21
+    alloc 2048 anchor22
+    alloc 2048 anchor23
+    alloc 2048 anchor24
+    alloc 2048 anchor25
+    alloc 2048 anchor26
+    alloc 2048 anchor27
+    alloc 2048 anchor28
+    alloc 2048 anchor29
+    alloc 2048 anchor30
+    alloc 2048 anchor31
+    call phase4
+end

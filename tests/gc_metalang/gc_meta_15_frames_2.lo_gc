@@ -1,0 +1,68 @@
+# Fixed 32 KiB retained across 2 suspended frames; repeated retirement.
+# Native sweeps vary heap externally; WASM keeps its default heap.
+heap 262144
+expect success
+
+func leaf 0
+    alloc 16384 scratch
+    scratch = null
+end
+
+func phase1 0
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+end
+
+func phase2 0
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+end
+
+func phase3 0
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+end
+
+func phase4 0
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+end
+
+func frame0 0
+    alloc 16384 local
+    call frame1
+end
+
+func frame1 0
+    alloc 16384 local
+    call phase4
+end
+
+func main 0
+    call frame0
+    call frame0
+end

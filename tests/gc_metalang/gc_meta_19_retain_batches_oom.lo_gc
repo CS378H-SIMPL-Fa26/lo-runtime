@@ -1,0 +1,15 @@
+# Same nine 2 MiB requests, retained in one frame: OOM at the default 16 MiB heap.
+heap 8388608
+expect oom
+
+func main 0
+    alloc 2097152 live0
+    alloc 2097152 live1
+    alloc 2097152 live2
+    alloc 2097152 live3
+    alloc 2097152 live4
+    alloc 2097152 live5
+    alloc 2097152 live6
+    alloc 2097152 live7
+    alloc 2097152 live8
+end

@@ -1,0 +1,313 @@
+# Equal payload comparison: 256 x 256 = 65536 retained bytes.
+# Native sweeps vary heap externally; WASM keeps its default heap.
+heap 262144
+expect success
+
+func leaf 0
+    alloc 16384 scratch
+    scratch = null
+end
+
+func phase1 0
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+    call leaf
+end
+
+func phase2 0
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+    call phase1
+end
+
+func phase3 0
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+    call phase2
+end
+
+func phase4 0
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+    call phase3
+end
+
+func main 0
+    alloc 256 anchor0
+    alloc 256 anchor1
+    alloc 256 anchor2
+    alloc 256 anchor3
+    alloc 256 anchor4
+    alloc 256 anchor5
+    alloc 256 anchor6
+    alloc 256 anchor7
+    alloc 256 anchor8
+    alloc 256 anchor9
+    alloc 256 anchor10
+    alloc 256 anchor11
+    alloc 256 anchor12
+    alloc 256 anchor13
+    alloc 256 anchor14
+    alloc 256 anchor15
+    alloc 256 anchor16
+    alloc 256 anchor17
+    alloc 256 anchor18
+    alloc 256 anchor19
+    alloc 256 anchor20
+    alloc 256 anchor21
+    alloc 256 anchor22
+    alloc 256 anchor23
+    alloc 256 anchor24
+    alloc 256 anchor25
+    alloc 256 anchor26
+    alloc 256 anchor27
+    alloc 256 anchor28
+    alloc 256 anchor29
+    alloc 256 anchor30
+    alloc 256 anchor31
+    alloc 256 anchor32
+    alloc 256 anchor33
+    alloc 256 anchor34
+    alloc 256 anchor35
+    alloc 256 anchor36
+    alloc 256 anchor37
+    alloc 256 anchor38
+    alloc 256 anchor39
+    alloc 256 anchor40
+    alloc 256 anchor41
+    alloc 256 anchor42
+    alloc 256 anchor43
+    alloc 256 anchor44
+    alloc 256 anchor45
+    alloc 256 anchor46
+    alloc 256 anchor47
+    alloc 256 anchor48
+    alloc 256 anchor49
+    alloc 256 anchor50
+    alloc 256 anchor51
+    alloc 256 anchor52
+    alloc 256 anchor53
+    alloc 256 anchor54
+    alloc 256 anchor55
+    alloc 256 anchor56
+    alloc 256 anchor57
+    alloc 256 anchor58
+    alloc 256 anchor59
+    alloc 256 anchor60
+    alloc 256 anchor61
+    alloc 256 anchor62
+    alloc 256 anchor63
+    alloc 256 anchor64
+    alloc 256 anchor65
+    alloc 256 anchor66
+    alloc 256 anchor67
+    alloc 256 anchor68
+    alloc 256 anchor69
+    alloc 256 anchor70
+    alloc 256 anchor71
+    alloc 256 anchor72
+    alloc 256 anchor73
+    alloc 256 anchor74
+    alloc 256 anchor75
+    alloc 256 anchor76
+    alloc 256 anchor77
+    alloc 256 anchor78
+    alloc 256 anchor79
+    alloc 256 anchor80
+    alloc 256 anchor81
+    alloc 256 anchor82
+    alloc 256 anchor83
+    alloc 256 anchor84
+    alloc 256 anchor85
+    alloc 256 anchor86
+    alloc 256 anchor87
+    alloc 256 anchor88
+    alloc 256 anchor89
+    alloc 256 anchor90
+    alloc 256 anchor91
+    alloc 256 anchor92
+    alloc 256 anchor93
+    alloc 256 anchor94
+    alloc 256 anchor95
+    alloc 256 anchor96
+    alloc 256 anchor97
+    alloc 256 anchor98
+    alloc 256 anchor99
+    alloc 256 anchor100
+    alloc 256 anchor101
+    alloc 256 anchor102
+    alloc 256 anchor103
+    alloc 256 anchor104
+    alloc 256 anchor105
+    alloc 256 anchor106
+    alloc 256 anchor107
+    alloc 256 anchor108
+    alloc 256 anchor109
+    alloc 256 anchor110
+    alloc 256 anchor111
+    alloc 256 anchor112
+    alloc 256 anchor113
+    alloc 256 anchor114
+    alloc 256 anchor115
+    alloc 256 anchor116
+    alloc 256 anchor117
+    alloc 256 anchor118
+    alloc 256 anchor119
+    alloc 256 anchor120
+    alloc 256 anchor121
+    alloc 256 anchor122
+    alloc 256 anchor123
+    alloc 256 anchor124
+    alloc 256 anchor125
+    alloc 256 anchor126
+    alloc 256 anchor127
+    alloc 256 anchor128
+    alloc 256 anchor129
+    alloc 256 anchor130
+    alloc 256 anchor131
+    alloc 256 anchor132
+    alloc 256 anchor133
+    alloc 256 anchor134
+    alloc 256 anchor135
+    alloc 256 anchor136
+    alloc 256 anchor137
+    alloc 256 anchor138
+    alloc 256 anchor139
+    alloc 256 anchor140
+    alloc 256 anchor141
+    alloc 256 anchor142
+    alloc 256 anchor143
+    alloc 256 anchor144
+    alloc 256 anchor145
+    alloc 256 anchor146
+    alloc 256 anchor147
+    alloc 256 anchor148
+    alloc 256 anchor149
+    alloc 256 anchor150
+    alloc 256 anchor151
+    alloc 256 anchor152
+    alloc 256 anchor153
+    alloc 256 anchor154
+    alloc 256 anchor155
+    alloc 256 anchor156
+    alloc 256 anchor157
+    alloc 256 anchor158
+    alloc 256 anchor159
+    alloc 256 anchor160
+    alloc 256 anchor161
+    alloc 256 anchor162
+    alloc 256 anchor163
+    alloc 256 anchor164
+    alloc 256 anchor165
+    alloc 256 anchor166
+    alloc 256 anchor167
+    alloc 256 anchor168
+    alloc 256 anchor169
+    alloc 256 anchor170
+    alloc 256 anchor171
+    alloc 256 anchor172
+    alloc 256 anchor173
+    alloc 256 anchor174
+    alloc 256 anchor175
+    alloc 256 anchor176
+    alloc 256 anchor177
+    alloc 256 anchor178
+    alloc 256 anchor179
+    alloc 256 anchor180
+    alloc 256 anchor181
+    alloc 256 anchor182
+    alloc 256 anchor183
+    alloc 256 anchor184
+    alloc 256 anchor185
+    alloc 256 anchor186
+    alloc 256 anchor187
+    alloc 256 anchor188
+    alloc 256 anchor189
+    alloc 256 anchor190
+    alloc 256 anchor191
+    alloc 256 anchor192
+    alloc 256 anchor193
+    alloc 256 anchor194
+    alloc 256 anchor195
+    alloc 256 anchor196
+    alloc 256 anchor197
+    alloc 256 anchor198
+    alloc 256 anchor199
+    alloc 256 anchor200
+    alloc 256 anchor201
+    alloc 256 anchor202
+    alloc 256 anchor203
+    alloc 256 anchor204
+    alloc 256 anchor205
+    alloc 256 anchor206
+    alloc 256 anchor207
+    alloc 256 anchor208
+    alloc 256 anchor209
+    alloc 256 anchor210
+    alloc 256 anchor211
+    alloc 256 anchor212
+    alloc 256 anchor213
+    alloc 256 anchor214
+    alloc 256 anchor215
+    alloc 256 anchor216
+    alloc 256 anchor217
+    alloc 256 anchor218
+    alloc 256 anchor219
+    alloc 256 anchor220
+    alloc 256 anchor221
+    alloc 256 anchor222
+    alloc 256 anchor223
+    alloc 256 anchor224
+    alloc 256 anchor225
+    alloc 256 anchor226
+    alloc 256 anchor227
+    alloc 256 anchor228
+    alloc 256 anchor229
+    alloc 256 anchor230
+    alloc 256 anchor231
+    alloc 256 anchor232
+    alloc 256 anchor233
+    alloc 256 anchor234
+    alloc 256 anchor235
+    alloc 256 anchor236
+    alloc 256 anchor237
+    alloc 256 anchor238
+    alloc 256 anchor239
+    alloc 256 anchor240
+    alloc 256 anchor241
+    alloc 256 anchor242
+    alloc 256 anchor243
+    alloc 256 anchor244
+    alloc 256 anchor245
+    alloc 256 anchor246
+    alloc 256 anchor247
+    alloc 256 anchor248
+    alloc 256 anchor249
+    alloc 256 anchor250
+    alloc 256 anchor251
+    alloc 256 anchor252
+    alloc 256 anchor253
+    alloc 256 anchor254
+    alloc 256 anchor255
+    call phase4
+end
