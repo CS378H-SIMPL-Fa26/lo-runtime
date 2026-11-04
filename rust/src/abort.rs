@@ -24,6 +24,9 @@ extern "C" {
 pub(crate) enum AbortCode {
     ABORT_CAST_FAILURE = 101,
     ABORT_NULL_RECEIVER = 102,
+    ABORT_GENERATOR_EXHAUSTED = 103,
+    ABORT_GENERATOR_RUNNING = 104,
+    ABORT_GENERATOR_FRESH_SEND = 105,
     ABORT_READ_INT_MALFORMED = 110,
     ABORT_READ_INT_EOF = 111,
     ABORT_READ_BOOL_MALFORMED = 112,
@@ -72,5 +75,32 @@ pub unsafe extern "C" fn lo_abort_null_receiver(method_name: *const u8, method_n
     runtime_abort(
         &format!("lo_abort_null_receiver: cannot dispatch {name}"),
         AbortCode::ABORT_NULL_RECEIVER as i32,
+    )
+}
+
+/// Abort an invalid generator operation (LO-5).
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_exhausted() -> ! {
+    runtime_abort(
+        "generator is exhausted",
+        AbortCode::ABORT_GENERATOR_EXHAUSTED as i32,
+    )
+}
+
+/// Abort an invalid generator operation (LO-5).
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_running() -> ! {
+    runtime_abort(
+        "generator is already running",
+        AbortCode::ABORT_GENERATOR_RUNNING as i32,
+    )
+}
+
+/// Abort an invalid generator operation (LO-5).
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_fresh_send() -> ! {
+    runtime_abort(
+        "cannot send to an unstarted generator",
+        AbortCode::ABORT_GENERATOR_FRESH_SEND as i32,
     )
 }

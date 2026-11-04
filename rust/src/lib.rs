@@ -54,7 +54,10 @@ pub use io::{
     lo_read_string,
 };
 
-pub use abort::lo_abort_null_receiver;
+pub use abort::{
+    lo_abort_generator_exhausted, lo_abort_generator_fresh_send, lo_abort_generator_running,
+    lo_abort_null_receiver,
+};
 pub use cast::{lo_cast_check, lo_instanceof};
 pub use gc::{lo_gc_collect, lo_gc_register_static, lo_gc_write_barrier};
 pub use string_ops::{

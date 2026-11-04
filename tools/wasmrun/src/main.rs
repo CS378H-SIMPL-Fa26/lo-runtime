@@ -164,7 +164,16 @@ fn abort_exit(err: anyhow::Error, emitted: Option<Vec<u8>>) -> i32 {
     // via `host_write_stderr` before trapping (now every abort kind emits);
     // the documented §3.8 fallbacks below fire only if emission was somehow absent.
     let bt = format!("{err:?}");
-    let (code, fallback): (i32, &str) = if bt.contains("lo_abort_null_receiver") {
+    // LTO may inline the small generator helpers, so use their emitted
+    // diagnostics rather than depending on their names in the backtrace.
+    let message = emitted.as_deref().unwrap_or_default();
+    let (code, fallback): (i32, &str) = if message == b"generator is exhausted" {
+        (103, "generator is exhausted")
+    } else if message == b"generator is already running" {
+        (104, "generator is already running")
+    } else if message == b"cannot send to an unstarted generator" {
+        (105, "cannot send to an unstarted generator")
+    } else if bt.contains("lo_abort_null_receiver") {
         (102, "lo_abort_null_receiver: cannot dispatch <method>")
     } else if bt.contains("lo_cast_check") {
         (101, "lo_cast_check: cast failure")
