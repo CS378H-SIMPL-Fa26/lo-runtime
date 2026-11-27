@@ -224,13 +224,18 @@ The I/O surface is the lowering target for the synthetic `Input` and `Output` st
 
 ### 3.8 Dispatch aborts
 
-Most aborts originate inside the entry points documented above: `lo_alloc` on OOM (exit 137), `lo_string_repeat` on negative count (exit 120), `lo_cast_check` on type mismatch (exit 101), `lo_read_int` / `lo_read_bool` on bad or absent input (exits 110 – 112). For aborts that codegen needs to trigger at sites the runtime doesn't directly own — currently just null-receiver detection at method dispatch — the runtime exposes a dedicated helper:
+Most aborts originate inside the entry points documented above: `lo_alloc` on OOM (exit 137), `lo_string_repeat` on negative count (exit 120), `lo_cast_check` on type mismatch (exit 101), `lo_read_int` / `lo_read_bool` on bad or absent input (exits 110 – 112). For aborts that codegen needs to trigger at sites the runtime doesn't directly own — null-receiver detection at method dispatch, and the three illegal generator resumptions — the runtime exposes dedicated helpers:
 
 ```
 extern "C" fn lo_abort_null_receiver(method_name: *const u8, method_name_len: u32) -> !
+extern "C" fn lo_abort_generator_exhausted() -> !
+extern "C" fn lo_abort_generator_running() -> !
+extern "C" fn lo_abort_generator_unstarted() -> !
 ```
 
 Codegen emits a null check immediately before each method-dispatch instruction. On null receiver, codegen calls `lo_abort_null_receiver` with a pointer to the dispatched method's name (typically a static byte string in `.rodata`); the helper writes `lo_abort_null_receiver: cannot dispatch <method_name>` to stderr and exits with status 102 on native; `unreachable` trap on WASM. The function returns never (`-> !` in Rust; `noreturn` equivalents in Zig and C++).
+
+The three generator helpers take no arguments: the generator's state alone determines which one applies, and codegen knows statically which call site can reach each. `lo_abort_generator_exhausted` (103) and `lo_abort_generator_running` (104) are called from the generator's resume function, whose prologue loads the state and branches on it before restoring anything; `lo_abort_generator_unstarted` (105) is called at the `send` call site, since only `send` can reach it and `next` on an unstarted generator is how a generator is legally started. Each writes `<symbol>: <reason>` to stderr and exits with its status on native; `unreachable` trap on WASM. All three return never.
 
 Future runtime aborts that codegen needs to trigger directly (e.g., array out-of-bounds in an LO-5 extension that adds arrays) follow the same pattern: dedicated helper with documented exit code, with the code registered in `lo-testing/error-codes.md` § Runtime-abort signals.
 
@@ -240,6 +245,9 @@ A summary of all native exit codes emitted by the runtime, for cross-reference:
 |------|---------|-------------------|
 | 101 | Cast failure | `lo_cast_check` (§3.5) |
 | 102 | Null receiver at method dispatch | `lo_abort_null_receiver` (codegen-emitted call) |
+| 103 | Resuming an exhausted generator | `lo_abort_generator_exhausted` (codegen-emitted call) |
+| 104 | Resuming a generator from inside itself | `lo_abort_generator_running` (codegen-emitted call) |
+| 105 | `send` to an unstarted generator | `lo_abort_generator_unstarted` (codegen-emitted call) |
 | 110 | `read_int` malformed token | `lo_read_int` (§3.7) |
 | 111 | `read_int` end of input | `lo_read_int` (§3.7) |
 | 112 | `read_bool` invalid token | `lo_read_bool` (§3.7) |

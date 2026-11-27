@@ -24,6 +24,9 @@ extern "C" {
 pub(crate) enum AbortCode {
     ABORT_CAST_FAILURE = 101,
     ABORT_NULL_RECEIVER = 102,
+    ABORT_GENERATOR_EXHAUSTED = 103,
+    ABORT_GENERATOR_RUNNING = 104,
+    ABORT_GENERATOR_UNSTARTED = 105,
     ABORT_READ_INT_MALFORMED = 110,
     ABORT_READ_INT_EOF = 111,
     ABORT_READ_BOOL_MALFORMED = 112,
@@ -72,5 +75,40 @@ pub unsafe extern "C" fn lo_abort_null_receiver(method_name: *const u8, method_n
     runtime_abort(
         &format!("lo_abort_null_receiver: cannot dispatch {name}"),
         AbortCode::ABORT_NULL_RECEIVER as i32,
+    )
+}
+
+/// Abort on resuming a generator whose body has already run off the end
+/// (`runtime-abi.md` §3.8). Called from the resume function's prologue. Exit
+/// status 103 on native; message-then-trap on WASM.
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_exhausted() -> ! {
+    runtime_abort(
+        "lo_abort_generator_exhausted: generator is exhausted",
+        AbortCode::ABORT_GENERATOR_EXHAUSTED as i32,
+    )
+}
+
+/// Abort on resuming a generator from inside its own body (`runtime-abi.md`
+/// §3.8). The resume function claims the generator before running any body
+/// statement, so a re-entrant resume reaches this. Exit status 104 on native;
+/// message-then-trap on WASM.
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_running() -> ! {
+    runtime_abort(
+        "lo_abort_generator_running: generator is already running",
+        AbortCode::ABORT_GENERATOR_RUNNING as i32,
+    )
+}
+
+/// Abort on sending a value to a generator that has not been started
+/// (`runtime-abi.md` §3.8): it is suspended at no `yield`, so the value has
+/// nowhere to go. Emitted at the `send` call site, not in the resume function.
+/// Exit status 105 on native; message-then-trap on WASM.
+#[no_mangle]
+pub extern "C" fn lo_abort_generator_unstarted() -> ! {
+    runtime_abort(
+        "lo_abort_generator_unstarted: cannot send to an unstarted generator",
+        AbortCode::ABORT_GENERATOR_UNSTARTED as i32,
     )
 }
