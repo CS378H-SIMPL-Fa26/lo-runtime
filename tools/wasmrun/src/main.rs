@@ -166,6 +166,15 @@ fn abort_exit(err: anyhow::Error, emitted: Option<Vec<u8>>) -> i32 {
     let bt = format!("{err:?}");
     let (code, fallback): (i32, &str) = if bt.contains("lo_abort_null_receiver") {
         (102, "lo_abort_null_receiver: cannot dispatch <method>")
+    } else if bt.contains("lo_abort_generator_exhausted") {
+        (103, "lo_abort_generator_exhausted: generator is exhausted")
+    } else if bt.contains("lo_abort_generator_running") {
+        (104, "lo_abort_generator_running: generator is already running")
+    } else if bt.contains("lo_abort_generator_unstarted") {
+        (
+            105,
+            "lo_abort_generator_unstarted: cannot send to an unstarted generator",
+        )
     } else if bt.contains("lo_cast_check") {
         (101, "lo_cast_check: cast failure")
     } else if bt.contains("lo_string_repeat") {
